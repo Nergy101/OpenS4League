@@ -1,0 +1,25 @@
+{
+  Network:
+  {
+    Listener: 127.0.0.1:28005
+    Address: 127.0.0.1
+    UdpPorts: [29000, 29001]
+    WorkerThreads: -1
+    MaxSessions: 100
+  }
+  Database:
+  {
+    ConnectionStrings:
+    {
+      Redis: 127.0.0.1
+      Game: Host=127.0.0.1;Port=5432;Database=game;Username=postgres;Password=1234;
+    }
+    RunMigration: true
+  }
+  Logging:
+  {
+    Name: relay
+    Directory: logs
+    Level: Debug
+  }
+}

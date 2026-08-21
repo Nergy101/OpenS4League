@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="S4LServerConfigTool.Views.MainWindow"
+        Width="1080" Height="700" MinWidth="820" MinHeight="520"
+        Title="S4 League Server Config &amp; Deploy Tool">
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="240,*" Margin="8" RowSpacing="8" ColumnSpacing="10">
+
+        <!-- Server list -->
+        <StackPanel Grid.Row="1" Spacing="5">
+            <TextBlock Text="Servers (config.hjson)" FontWeight="Bold"/>
+            <ListBox x:Name="ServerList" SelectionChanged="ServerList_SelectionChanged"/>
+            <TextBlock x:Name="PathInfo" FontSize="11" Foreground="#9aa" TextWrapping="Wrap"/>
+            <TextBlock Text="Plugin folders" FontWeight="Bold" Margin="0,10,0,0"/>
+            <ListBox x:Name="PluginList" Height="140"/>
+        </StackPanel>
+
+        <!-- Config editor -->
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
+            <TextBlock x:Name="EditorTitle" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBox x:Name="Editor" Grid.Row="1" AcceptsReturn="True" FontFamily="Consolas" FontSize="13"/>
+        </Grid>
+
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+            <Button x:Name="Detect" Content="Auto-detect repo" Click="Detect_Click"/>
+            <Button x:Name="Save" Content="Save config" Click="Save_Click"/>
+            <Button x:Name="Deploy" Content="Build deploy package…" Click="Deploy_Click"/>
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Foreground="#8a8" Margin="8,0,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/S4League.Resource/S4League.Resource.csproj" />
+    <Project Path="src/S4League.Scn/S4League.Scn.csproj" />
+    <Project Path="src/S4LResourceTool.App/S4LResourceTool.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/S4League.Resource.SelfTest/S4League.Resource.SelfTest.csproj" />
+    <Project Path="tests/S4LResourceTool.App.HeadlessTests/S4LResourceTool.App.HeadlessTests.csproj" />
+  </Folder>
+</Solution>

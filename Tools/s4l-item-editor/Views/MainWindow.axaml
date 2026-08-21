@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dg="using:Avalonia.Controls"
+        x:Class="S4LItemEditor.Views.MainWindow"
+        Width="1150" Height="700" MinWidth="840" MinHeight="520"
+        Title="S4 League Item / Shop / Weapon Editor">
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="8" RowSpacing="8">
+
+        <!-- Source -->
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Open an XML data file (items/shop/weapon/etc.) from archive or disk"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <TextBox x:Name="SourcePath" IsReadOnly="True"/>
+                    <Button x:Name="BrowseSource" Content="Browse…" Click="BrowseSource_Click"/>
+                </Grid>
+            </StackPanel>
+            <Button x:Name="FromArchive" Grid.Column="1" Content="From resource.s4hd…" Click="FromArchive_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="Load" Grid.Column="2" Content="Load" Click="Load_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="Save" Grid.Column="3" Content="Save" Click="Save_Click" VerticalAlignment="Bottom"/>
+        </Grid>
+
+        <!-- Record element selector + grid -->
+        <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,8,0,0">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,4">
+                <TextBlock Text="Record element:" VerticalAlignment="Center"/>
+                <ComboBox x:Name="RecordCombo" Grid.Column="1" Margin="8,0" SelectionChanged="RecordCombo_SelectionChanged"/>
+                <TextBlock x:Name="RowCount" Grid.Column="2" VerticalAlignment="Center" Foreground="#9aa"/>
+            </Grid>
+            <dg:DataGrid x:Name="Grid" Grid.Row="1" IsReadOnly="True"
+                         AutoGenerateColumns="False" RowHeight="24"/>
+        </Grid>
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+            <Button x:Name="AddRow" Content="+ Add row" Click="AddRow_Click"/>
+            <Button x:Name="DeleteRow" Content="Delete row" Click="DeleteRow_Click"/>
+            <Button x:Name="Commit" Content="Commit edits to XML" Click="Commit_Click"/>
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Foreground="#8a8" Margin="8,0,0,0"/>
+        </StackPanel>
+
+        <!-- Raw XML -->
+        <TextBox x:Name="RawXml" Grid.Row="3" MinHeight="90" AcceptsReturn="True" FontFamily="Consolas" FontSize="12" Margin="0,8,0,0"/>
+    </Grid>
+</Window>

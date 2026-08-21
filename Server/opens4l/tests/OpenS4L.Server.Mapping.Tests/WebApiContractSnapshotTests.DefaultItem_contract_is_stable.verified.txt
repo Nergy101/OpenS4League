@@ -1,0 +1,7 @@
+﻿{
+  Item: {
+    Id: 2010001,
+    Name: Sword
+  },
+  Variation: 1
+}

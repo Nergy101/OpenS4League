@@ -1,0 +1,153 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:S4LResourceTool.App.ViewModels"
+        xmlns:views="using:S4LResourceTool.App.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="S4LResourceTool.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1180" Height="740"
+        MinWidth="820" MinHeight="520"
+        Title="S4 League Resource Tool">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+
+    <!-- Toolbar -->
+    <Border Grid.Row="0" Padding="10,8" Background="#20FFFFFF">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+        <Button Grid.Column="0" Content="Open S4 League folder…"
+                Command="{Binding SelectDirectoryCommand}" Margin="0,0,8,0"/>
+        <Button Grid.Column="1" Content="Scan for resource.s4hd…"
+                Command="{Binding ScanArchivesCommand}" Margin="0,0,8,0"/>
+        <Button Grid.Column="2" Content="Save archive"
+                Command="{Binding SaveCommand}" Margin="0,0,8,0"/>
+        <Button Grid.Column="3" Content="Find unused…"
+                Command="{Binding FindUnusedCommand}" Margin="0,0,8,0"/>
+        <Button Grid.Column="4" Content="Open in Unity"
+                Command="{Binding OpenInUnityCommand}"
+                IsVisible="{Binding ShowScene}" Margin="0,0,8,0"/>
+
+        <TextBox Grid.Column="6" Width="280"
+                 Watermark="Search resources…"
+                 Text="{Binding SearchText}"/>
+      </Grid>
+    </Border>
+
+    <!-- Body -->
+    <Grid Grid.Row="1" ColumnDefinitions="260,Auto,*">
+
+      <!-- Folder tree -->
+      <TreeView Grid.Column="0"
+                ItemsSource="{Binding Folders}"
+                SelectedItem="{Binding SelectedFolder, Mode=TwoWay}">
+        <TreeView.ItemContainerTheme>
+          <ControlTheme TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}"
+                        x:CompileBindings="False">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+          </ControlTheme>
+        </TreeView.ItemContainerTheme>
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:FolderNode">
+            <TextBlock Text="{Binding Name}"/>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
+
+      <GridSplitter Grid.Column="1" Width="4" Background="#22000000"/>
+
+      <!-- Files + preview -->
+      <Grid Grid.Column="2" RowDefinitions="*,Auto,2.2*">
+
+        <DataGrid Grid.Row="0" Name="FilesGrid"
+                  ItemsSource="{Binding Files}"
+                  SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                  SelectionMode="Extended"
+                  IsReadOnly="True"
+                  CanUserResizeColumns="True"
+                  CanUserSortColumns="True"
+                  GridLinesVisibility="Horizontal"
+                  DoubleTapped="OnFilesDoubleTapped">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2.5*"/>
+            <DataGridTextColumn Header="Type" Binding="{Binding TypeText}" Width="Auto"/>
+            <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedText}" Width="Auto"/>
+            <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="Auto"/>
+            <DataGridTextColumn Header="Resource file" Binding="{Binding ChecksumFile}" Width="*"/>
+          </DataGrid.Columns>
+          <DataGrid.ContextMenu>
+            <ContextMenu>
+              <MenuItem Header="Open" Command="{Binding OpenExternallyCommand}"/>
+              <MenuItem Header="Export…" Command="{Binding ExportCommand}"/>
+              <MenuItem Header="Replace…" Command="{Binding ReplaceCommand}"/>
+              <Separator/>
+              <MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>
+            </ContextMenu>
+          </DataGrid.ContextMenu>
+        </DataGrid>
+
+        <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="#22000000"/>
+
+        <!-- Preview -->
+        <Border Grid.Row="2" BorderBrush="#22000000" BorderThickness="0,1,0,0">
+          <DockPanel>
+            <ComboBox DockPanel.Dock="Bottom"
+                      ItemsSource="{Binding TextureOptions}"
+                      SelectedItem="{Binding SelectedTexture, Mode=TwoWay}"
+                      IsVisible="{Binding ShowTexturePicker}"
+                      HorizontalAlignment="Stretch" Margin="8,6" MinWidth="220"
+                      HorizontalContentAlignment="Left"/>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        Margin="8,6" IsVisible="{Binding ShowScalePicker}">
+              <TextBlock Text="Preview scale:" VerticalAlignment="Center"/>
+              <ComboBox ItemsSource="{Binding PreviewScales}"
+                        SelectedItem="{Binding PreviewScale, Mode=TwoWay}"
+                        MinWidth="90"/>
+              <Button Content="Export upscaled…"
+                      Command="{Binding ExportUpscaledCommand}"
+                      IsVisible="{Binding CanExportUpscaled}"
+                      VerticalAlignment="Center"/>
+            </StackPanel>
+            <Panel>
+              <ScrollViewer IsVisible="{Binding ShowText}">
+                <SelectableTextBlock Text="{Binding PreviewText}"
+                                     FontFamily="Cascadia Code,Menlo,Consolas,monospace"
+                                     FontSize="12" Padding="10" TextWrapping="NoWrap"/>
+              </ScrollViewer>
+
+              <ScrollViewer IsVisible="{Binding ShowImage}"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                <Image Source="{Binding PreviewImage}" Stretch="Uniform" Margin="10"/>
+              </ScrollViewer>
+
+              <TextBlock IsVisible="{Binding ShowInfo}"
+                         Text="{Binding PreviewInfo}"
+                         Foreground="#99FFFFFF"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         TextAlignment="Center" TextWrapping="Wrap" Padding="20"/>
+
+              <views:ScnPreviewView IsVisible="{Binding ShowScene}"
+                                    Meshes="{Binding PreviewMeshes}"
+                                    Textures="{Binding PreviewTextures}"
+                                    TextureOverride="{Binding PreviewTextureOverride}"/>
+            </Panel>
+          </DockPanel>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <!-- Status bar -->
+    <Border Grid.Row="2" Padding="10,6" Background="#20FFFFFF">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding Status}" VerticalAlignment="Center"/>
+        <ProgressBar Grid.Column="1" Width="180" Margin="8,0"
+                     Minimum="0" Maximum="{Binding ProgressMax}" Value="{Binding ProgressValue}"
+                     IsVisible="{Binding ProgressVisible}" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="2" Text="{Binding ClientPathText}"
+                   Foreground="#99FFFFFF" VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:view="using:S4League.View"
+        x:Class="S4LCharacterViewer.Views.MainWindow"
+        Width="1150" Height="700" MinWidth="820" MinHeight="520"
+        Title="S4 League Character Viewer">
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="320,*" Margin="8" RowSpacing="8" ColumnSpacing="10">
+
+        <!-- Toolbar -->
+        <StackPanel Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="OpenScn" Content="Open .scn..." Click="OpenScn_Click"/>
+            <Button x:Name="OpenArchive" Content="Open resource.s4hd..." Click="OpenArchive_Click"/>
+            <TextBlock Text="Scene:" VerticalAlignment="Center"/>
+            <ComboBox x:Name="ArchiveSceneCombo" Width="180" IsEnabled="False"
+                      SelectionChanged="ArchiveSceneCombo_SelectionChanged"/>
+            <TextBlock Text="Texture:" VerticalAlignment="Center"/>
+            <ComboBox x:Name="TextureCombo" Width="170" IsEnabled="False"
+                      SelectionChanged="TextureCombo_SelectionChanged"/>
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Foreground="#8a8" Margin="10,0,0,0"/>
+        </StackPanel>
+
+        <!-- Left panel -->
+        <StackPanel Grid.Row="1" Spacing="5">
+            <TextBlock Text="Models" FontWeight="Bold"/>
+            <ListBox x:Name="ModelList" Height="210"/>
+            <TextBlock Text="Animations (click to preview)" FontWeight="Bold"/>
+            <ListBox x:Name="AnimList" Height="180"/>
+            <TextBlock Text="Bones / bone systems / shapes" FontWeight="Bold"/>
+            <TextBlock x:Name="BoneInfo" TextWrapping="Wrap" FontSize="12" Foreground="#9aa"/>
+        </StackPanel>
+
+        <!-- 3D preview -->
+        <view:ScnPreviewView x:Name="Preview" Grid.Row="1" Grid.Column="1"/>
+
+        <!-- Animation controls -->
+        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="PlayBtn" Content="Play" Click="Play_Click" IsEnabled="False"/>
+            <Button x:Name="StopBtn" Content="Stop" Click="Stop_Click" IsEnabled="False"/>
+            <TextBlock Text="Time:" VerticalAlignment="Center"/>
+            <Slider x:Name="TimeSlider" MinWidth="220" VerticalAlignment="Center"
+                    ValueChanged="TimeSlider_ValueChanged"/>
+            <TextBlock x:Name="TimeText" VerticalAlignment="Center" MinWidth="140" FontSize="12"/>
+        </StackPanel>
+    </Grid>
+</Window>

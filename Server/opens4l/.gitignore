@@ -1,0 +1,6 @@
+# Build output (see also the repo-root .gitignore)
+bin/
+obj/
+dist/
+publish/
+*.user

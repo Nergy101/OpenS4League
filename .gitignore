@@ -1,0 +1,54 @@
+# ---- .NET / build output ----
+bin/
+obj/
+dist/
+publish/
+TestResults/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+project.lock.json
+
+# ---- IDE / editors ----
+.vs/
+.vscode/
+.idea/
+*.DotSettings
+*.DotSettings.user
+*.swp
+*.sln.docstates
+
+
+# ---- Frontend ----
+node_modules/
+
+# ---- Ssamples ----
+sample_*.sql
+
+# ---- secrets / env ----
+.env
+.env.*
+!.env.example
+
+# ---- staged Docker plugin DLLs (rebuilt by `make plugins`) ----
+Server/Docker/plugins/**/*.dll
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+Desktop.ini
+__pycache__/
+*.pyc
+
+# ---- logs / runtime ----
+*.log
+logs/
+*.sqlite
+*.s4hd
+
+# ---- test coverage output ----
+coverage-results/
+
+# ---- Hermes agent tooling ----
+.hermes/

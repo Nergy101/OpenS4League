@@ -1,0 +1,25 @@
+﻿using System.Xml.Serialization;
+
+namespace OpenS4L.Resource.xml
+{
+    [XmlType(AnonymousType = true)]
+    [XmlRoot(Namespace = "", IsNullable = false, ElementName = "effect_match_list")]
+    public class EffectMatchListDto
+    {
+        [XmlElement("match_key")]
+        public EffectMatchListMatchKeyDto[] match_key { get; set; }
+    }
+
+    [XmlType(AnonymousType = true)]
+    public class EffectMatchListMatchKeyDto
+    {
+        [XmlAttribute]
+        public uint id { get; set; }
+
+        [XmlAttribute]
+        public string name_key { get; set; }
+
+        [XmlAttribute]
+        public int grade { get; set; }
+    }
+}

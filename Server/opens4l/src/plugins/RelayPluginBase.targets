@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)\..\OpenS4L.Server.Relay\OpenS4L.Server.Relay.csproj" Private="False" />
+  </ItemGroup>
+  <Import Project="$(MSBuildThisFileDirectory)\WorkaroundSDKIssue1366.targets" />
+</Project>

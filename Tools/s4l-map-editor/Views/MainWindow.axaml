@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:view="using:S4League.View"
+        x:Class="S4LMapEditor.Views.MainWindow"
+        Width="1300" Height="760" MinWidth="960" MinHeight="560"
+        Title="S4 League Map / Scenario Editor">
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="270,250,*" Margin="8" RowSpacing="8" ColumnSpacing="10">
+
+        <!-- Toolbar -->
+        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="6">
+            <Button x:Name="OpenScn" Content="Open .scn..." Click="OpenScn_Click"/>
+            <Button x:Name="OpenArchive" Content="Open resource.s4hd..." Click="OpenArchive_Click"/>
+            <Button x:Name="SaveAs" Content="Save As..." Click="SaveAs_Click"/>
+            <Rectangle Width="1" Fill="#333" Height="24" VerticalAlignment="Center" Margin="4,0"/>
+            <Button x:Name="AddBox" Content="+ Box" Click="AddBox_Click"/>
+            <Button x:Name="AddShape" Content="+ Shape" Click="AddShape_Click"/>
+            <Button x:Name="Duplicate" Content="Duplicate" Click="Duplicate_Click"/>
+            <Button x:Name="Delete" Content="Delete" Click="Delete_Click"/>
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Foreground="#8a8" Margin="10,0,0,0"/>
+        </StackPanel>
+
+        <!-- Chunk tree -->
+        <StackPanel Grid.Row="1" Spacing="5">
+            <TextBlock Text="Scene chunks" FontWeight="Bold"/>
+            <ListBox x:Name="ChunkList" SelectionChanged="ChunkList_SelectionChanged"/>
+            <TextBlock x:Name="CountText" FontSize="12" Foreground="#9aa"/>
+        </StackPanel>
+
+        <!-- Transform editor -->
+        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6">
+            <TextBlock Text="Transform (selected chunk)" FontWeight="Bold"/>
+            <TextBlock x:Name="SelName" FontSize="12" Foreground="#aaf" TextWrapping="Wrap"/>
+
+            <TextBlock Text="Translation" FontSize="12" Foreground="#9aa"/>
+            <Grid ColumnDefinitions="70,70,70" ColumnSpacing="6">
+                <TextBox x:Name="Tx"/>
+                <TextBox x:Name="Ty" Grid.Column="1"/>
+                <TextBox x:Name="Tz" Grid.Column="2"/>
+            </Grid>
+
+            <TextBlock Text="Rotation (quaternion x y z w)" FontSize="12" Foreground="#9aa"/>
+            <Grid ColumnDefinitions="70,70,70,70" ColumnSpacing="6">
+                <TextBox x:Name="Rx"/>
+                <TextBox x:Name="Ry" Grid.Column="1"/>
+                <TextBox x:Name="Rz" Grid.Column="2"/>
+                <TextBox x:Name="Rw" Grid.Column="3"/>
+            </Grid>
+
+            <TextBlock Text="Scale" FontSize="12" Foreground="#9aa"/>
+            <Grid ColumnDefinitions="70,70,70" ColumnSpacing="6">
+                <TextBox x:Name="Sx"/>
+                <TextBox x:Name="Sy" Grid.Column="1"/>
+                <TextBox x:Name="Sz" Grid.Column="2"/>
+            </Grid>
+
+            <Button x:Name="ApplyTransform" Content="Apply transform" Click="ApplyTransform_Click" Margin="0,6,0,0"/>
+
+            <Rectangle Height="1" Fill="#333" Margin="0,8,0,8"/>
+
+            <TextBlock Text="Selection info" FontWeight="Bold"/>
+            <TextBlock x:Name="DetailText" FontSize="12" Foreground="#9aa" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- 3D preview -->
+        <view:ScnPreviewView x:Name="Preview" Grid.Row="1" Grid.Column="2"/>
+
+        <!-- Status -->
+        <TextBlock x:Name="StatusText" Grid.Row="2" Grid.ColumnSpan="3" FontSize="12" Foreground="#9aa"/>
+    </Grid>
+</Window>

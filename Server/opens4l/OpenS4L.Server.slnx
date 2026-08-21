@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Logging/Logging.csproj" />
+    <Project Path="src/OpenS4L.Blub/OpenS4L.Blub.csproj" />
+    <Project Path="src/OpenS4L.Common/OpenS4L.Common.csproj" />
+    <Project Path="src/OpenS4L.Database/OpenS4L.Database.csproj" />
+    <Project Path="src/OpenS4L.Network/OpenS4L.Network.csproj" />
+    <Project Path="src/OpenS4L.Resource/OpenS4L.Resource.csproj" />
+    <Project Path="src/OpenS4L.Server.Auth/OpenS4L.Server.Auth.csproj" />
+    <Project Path="src/OpenS4L.Server.Chat/OpenS4L.Server.Chat.csproj" />
+    <Project Path="src/OpenS4L.Server.Game/OpenS4L.Server.Game.csproj" />
+    <Project Path="src/OpenS4L.Server.Relay/OpenS4L.Server.Relay.csproj" />
+    <Project Path="src/ProudNet/ProudNet.csproj" />
+  </Folder>
+  <Folder Name="/plugins/">
+    <Project Path="src/plugins/OpenS4L.Plugins.EquipLimitExtended/OpenS4L.Plugins.EquipLimitExtended.csproj" />
+    <Project Path="src/plugins/OpenS4L.Plugins.ExamplePlugin/OpenS4L.Plugins.ExamplePlugin.csproj" />
+    <Project Path="src/plugins/OpenS4L.Plugins.SoloMode/OpenS4L.Plugins.SoloMode.csproj" />
+    <Project Path="src/plugins/OpenS4L.Plugins.WebApi/OpenS4L.Plugins.WebApi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenS4L.LoadBot/OpenS4L.LoadBot.csproj" />
+    <Project Path="tests/OpenS4L.Server.Mapping.Tests/OpenS4L.Server.Mapping.Tests.csproj" />
+  </Folder>
+</Solution>

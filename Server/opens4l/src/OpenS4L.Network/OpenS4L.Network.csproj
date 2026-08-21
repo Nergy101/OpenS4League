@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpLzo" Version="0.1.2" />
+    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenS4L.Common\OpenS4L.Common.csproj" />
+    <ProjectReference Include="..\ProudNet\ProudNet.csproj" />
+    <ProjectReference Include="..\OpenS4L.Blub\OpenS4L.Blub.csproj" />
+  </ItemGroup>
+</Project>

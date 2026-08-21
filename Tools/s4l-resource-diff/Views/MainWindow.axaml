@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="S4LResourceDiff.Views.MainWindow"
+        Width="1100" Height="680" MinWidth="800" MinHeight="500"
+        Title="S4 League Resource Diff / Sync">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="8" RowSpacing="8">
+
+        <!-- Archive selection -->
+        <Grid ColumnDefinitions="*,Auto,*,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Base archive (A)"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <TextBox x:Name="BasePath" IsReadOnly="True"/>
+                    <Button x:Name="BrowseBase" Content="Browse…" Click="BrowseBase_Click"/>
+                </Grid>
+            </StackPanel>
+            <Button x:Name="Swap" Grid.Column="1" Content="⇄" Click="Swap_Click" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+            <StackPanel Grid.Column="2" Spacing="4">
+                <TextBlock Text="Compared archive (B)"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <TextBox x:Name="OtherPath" IsReadOnly="True"/>
+                    <Button x:Name="BrowseOther" Grid.Column="1" Content="Browse…" Click="BrowseOther_Click"/>
+                </Grid>
+            </StackPanel>
+            <Button x:Name="Compare" Grid.Column="3" Content="Compare" Click="Compare_Click" VerticalAlignment="Bottom"/>
+        </Grid>
+
+        <!-- Summary -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="16" Margin="0,8,0,0">
+            <TextBlock x:Name="SumAdded" FontWeight="Bold" Foreground="#3ddc84"/>
+            <TextBlock x:Name="SumRemoved" FontWeight="Bold" Foreground="#f0564a"/>
+            <TextBlock x:Name="SumChanged" FontWeight="Bold" Foreground="#ffcc00"/>
+            <TextBlock x:Name="SumTotal" Foreground="#9aa"/>
+        </StackPanel>
+
+        <!-- Result list -->
+        <ListBox x:Name="ResultList" Grid.Row="2"/>
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+            <Button x:Name="ExportDelta" Content="Export delta package…" Click="ExportDelta_Click"/>
+            <Button x:Name="CopyBtoA" Content="Apply B → A (copy changed into base)" Click="CopyBtoA_Click"/>
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Foreground="#8a8" Margin="8,0,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

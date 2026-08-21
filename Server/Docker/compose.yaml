@@ -1,0 +1,139 @@
+# OpenS4L server stack (Docker) — PostgreSQL + Redis + the 4 .NET 10 servers + provisioner.
+# The servers run from the pre-built published output in ../opens4l/dist/<server> (see Makefile).
+# Default passwords come from .env (POSTGRES_PASSWORD=1234).
+name: opens4l
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: opens4l-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-1234}
+      POSTGRES_DB: auth
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - opens4l-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: opens4l-redis
+    # Host 6379 is taken by a locally-run redis-server; expose on 6380 instead.
+    # The servers reach Redis over the internal network via the `redis` service name.
+    ports:
+      - "127.0.0.1:6380:6379"
+    restart: unless-stopped
+
+  auth:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0
+    container_name: opens4l-auth
+    working_dir: /app
+    command: ["dotnet", "OpenS4L.Server.Auth.dll"]
+    volumes:
+      - ../opens4l/dist/auth:/app
+      - ./config/auth/config.hjson:/app/config.hjson:ro
+      - opens4l-clientdata:/app/data
+      - ./plugins/auth:/app/plugins
+    ports:
+      - "127.0.0.1:28002:28002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  chat:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0
+    container_name: opens4l-chat
+    working_dir: /app
+    command: ["dotnet", "OpenS4L.Server.Chat.dll"]
+    volumes:
+      - ../opens4l/dist/chat:/app
+      - ./config/chat/config.hjson:/app/config.hjson:ro
+      - ./plugins/chat:/app/plugins
+    ports:
+      - "127.0.0.1:28003:28003"
+      - "127.0.0.1:28006:28006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  game:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0
+    container_name: opens4l-game
+    working_dir: /app
+    command: ["dotnet", "OpenS4L.Server.Game.dll"]
+    volumes:
+      - ../opens4l/dist/game:/app
+      - ./config/game/config.hjson:/app/config.hjson:ro
+      - opens4l-clientdata:/app/data
+      - ./plugins/game:/app/plugins
+    ports:
+      - "127.0.0.1:28004:28004"
+      # WebApi plugin (serves /statistics, /rooms, /players for the admin console).
+      - "127.0.0.1:22000:22000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  relay:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0
+    container_name: opens4l-relay
+    working_dir: /app
+    command: ["dotnet", "OpenS4L.Server.Relay.dll"]
+    volumes:
+      - ../opens4l/dist/relay:/app
+      - ./config/relay/config.hjson:/app/config.hjson:ro
+      - ./plugins/relay:/app/plugins
+    ports:
+      - "127.0.0.1:28005:28005"
+      - "127.0.0.1:29000:29000/udp"
+      - "127.0.0.1:29001:29001/udp"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # One-shot provisioner: creates admin/admin + loads the free shop (idempotent).
+  provision:
+    build: ./provision
+    container_name: opens4l-provision
+    restart: "no"
+    environment:
+      DB_HOST: postgres
+      DB_ROOT_PASSWORD: ${POSTGRES_PASSWORD:-1234}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+    volumes:
+      - opens4l-clientdata:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      game:
+        condition: service_started
+
+volumes:
+  opens4l-db:
+  # Named volume for the server's game-content data (auth + game mount it at /app/data).
+  # It's created & populated by populate-data.sh (external), so run that before `up`:
+  #   ./populate-data.sh <path-to-client-data>   (or: make data SRC=<path>)
+  opens4l-clientdata:
+    external: true
+    name: opens4l_clientdata

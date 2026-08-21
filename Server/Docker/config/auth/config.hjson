@@ -1,0 +1,21 @@
+{
+  Listener: 0.0.0.0:28002
+  WorkerThreads: -1
+  ServerlistTimeout: 60000
+  Database:
+  {
+    ConnectionStrings:
+    {
+      Redis: redis
+      Auth: Host=postgres;Port=5432;Database=auth;Username=postgres;Password=1234;
+    }
+    RunMigration: true
+  }
+  Logging:
+  {
+    Name: auth
+    Directory: logs
+    Level: Debug
+  }
+  DataDir: /app/data
+}
