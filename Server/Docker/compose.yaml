@@ -7,6 +7,11 @@ services:
   postgres:
     image: postgres:16
     container_name: opens4l-postgres
+    # postgres:16 defaults to max_connections=100; the four servers' Npgsql pools alone hold
+    # ~75 idle, so a load-bot burst (each chat login opens a ChatContext) hits
+    # `53300 sorry, too many clients already` and the bots get dropped. 300 covers a
+    # ~100-player run with headroom.
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-1234}
