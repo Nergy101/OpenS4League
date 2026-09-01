@@ -9,6 +9,7 @@ namespace OpenS4L.Server.Chat
         public DatabaseOptions Database { get; set; }
         public LoggerOptions Logging { get; set; }
         public MetricsOptions Metrics { get; set; }
+        public MailOptions Mail { get; set; }
     }
 
     /// <summary>HTTP metrics listener config (a tiny /statistics endpoint for the admin console).</summary>

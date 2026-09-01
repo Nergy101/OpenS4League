@@ -7,7 +7,10 @@ using System.Threading.Tasks;
 using OpenS4L.Blub.Collections.Concurrent;
 using Logging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OpenS4L.Blub.Collections.Concurrent;
 using OpenS4L.Common;
+using OpenS4L.Common.Configuration;
 using OpenS4L.Database;
 using OpenS4L.Database.Auth;
 using OpenS4L.Database.Game;
@@ -24,6 +27,7 @@ namespace OpenS4L.Server.Chat
         private readonly DatabaseService _databaseService;
         private readonly IdGeneratorService _idGeneratorService;
         private readonly PlayerManager _playerManager;
+        private readonly MailOptions _mailOptions;
         private readonly ConcurrentDictionary<long, Mail> _mails;
         private readonly ConcurrentStack<Mail> _mailsToDelete;
 
@@ -32,12 +36,13 @@ namespace OpenS4L.Server.Chat
         public Mail this[long id] => CollectionExtensions.GetValueOrDefault(_mails, id);
 
         public Mailbox(ILogger<Mailbox> logger, DatabaseService databaseService, IdGeneratorService idGeneratorService,
-            PlayerManager playerManager)
+            PlayerManager playerManager, IOptions<MailOptions> mailOptions)
         {
             _logger = logger;
             _databaseService = databaseService;
             _idGeneratorService = idGeneratorService;
             _playerManager = playerManager;
+            _mailOptions = mailOptions.Value;
             _mails = new ConcurrentDictionary<long, Mail>();
             _mailsToDelete = new ConcurrentStack<Mail>();
         }
@@ -72,7 +77,7 @@ namespace OpenS4L.Server.Chat
                     }
                 }
 
-                _mails[mailEntity.Id] = new Mail(mailEntity, senderNickname);
+                _mails[mailEntity.Id] = new Mail(mailEntity, senderNickname, _mailOptions);
             }
         }
 
@@ -116,7 +121,7 @@ namespace OpenS4L.Server.Chat
                 db.PlayerMails.Add(entity);
 
                 var plr = _playerManager.GetByNickname(receiver);
-                plr?.Mailbox.Add(new Mail(entity, receiver));
+                plr?.Mailbox.Add(new Mail(entity, receiver, _mailOptions));
                 return true;
             }
         }
@@ -190,7 +195,9 @@ namespace OpenS4L.Server.Chat
         public ulong SenderId { get; }
 
         public DateTimeOffset SendDate { get; }
-        public DateTimeOffset Expires => SendDate.AddDays(30); // ToDo use config
+        public DateTimeOffset Expires => SendDate.AddDays(_mailOptions.ExpiryDays);
+
+        private readonly MailOptions _mailOptions;
 
         public string Title { get; }
         public string Message { get; }
@@ -200,8 +207,9 @@ namespace OpenS4L.Server.Chat
             internal set => SetIfChanged(ref _isNew, value);
         }
 
-        public Mail(PlayerMailEntity entity, string senderNickname)
+        public Mail(PlayerMailEntity entity, string senderNickname, MailOptions mailOptions)
         {
+            _mailOptions = mailOptions;
             SetExistsState(true);
             Id = entity.Id;
             SenderId = (ulong)entity.SenderPlayerId;

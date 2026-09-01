@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Logging;
+using Microsoft.Extensions.Options;
+using OpenS4L.Common.Configuration;
 using OpenS4L.Network.Data.Chat;
 using OpenS4L.Network.Message.Chat;
 using OpenS4L.Server.Chat.Mappers;
@@ -14,11 +16,14 @@ namespace OpenS4L.Server.Chat.Handlers
     {
         private readonly ILogger _logger;
         private readonly ChatMapper _mapper;
+        private readonly MailOptions _mailOptions;
 
-        public PrivateMessageHandler(ILogger<PrivateMessageHandler> logger, ChatMapper mapper)
+        public PrivateMessageHandler(ILogger<PrivateMessageHandler> logger, ChatMapper mapper,
+            IOptions<MailOptions> mailOptions)
         {
             _logger = logger;
             _mapper = mapper;
+            _mailOptions = mailOptions.Value;
         }
 
         [Firewall(typeof(MustBeLoggedIn))]
@@ -98,14 +103,13 @@ namespace OpenS4L.Server.Chat.Handlers
 
             logger.Debug("Send note {Message}", message);
 
-            // ToDo use config file
-            if (message.Title.Length > 100)
+            if (message.Title.Length > _mailOptions.MaxTitleLength)
             {
                 logger.Warning("Title is too big({Length})", message.Title.Length);
                 return true;
             }
 
-            if (message.Message.Length > 112)
+            if (message.Message.Length > _mailOptions.MaxMessageLength)
             {
                 logger.Warning("Message is too big({Length})", message.Message.Length);
                 return true;

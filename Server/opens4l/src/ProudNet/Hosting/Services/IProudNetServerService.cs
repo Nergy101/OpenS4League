@@ -20,6 +20,8 @@ namespace ProudNet.Hosting.Services
 
         event EventHandler<ErrorEventArgs> Error;
 
+        void RaiseError(ErrorEventArgs e);
+
         event EventHandler<UnhandledRmiEventArgs> UnhandledRmi;
     }
 }

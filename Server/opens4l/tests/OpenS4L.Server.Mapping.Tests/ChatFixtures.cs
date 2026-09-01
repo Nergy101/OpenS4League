@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using OpenS4L;
 using OpenS4L.Common;
+using OpenS4L.Common.Configuration;
 using OpenS4L.Database.Game;
 using OpenS4L.Network.Data.Chat;
 using OpenS4L.Server.Chat;
@@ -26,7 +27,7 @@ namespace OpenS4L.Server.Mapping.Tests
                 Title = "Hello",
                 Message = "Body",
                 IsMailNew = isNew
-            }, "senderNick");
+            }, "senderNick", new MailOptions());
         }
 
         public static Deny CreateDeny() => new(5, 5001, "DenyNick");

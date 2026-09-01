@@ -88,7 +88,7 @@ namespace ProudNet.Hosting.Services
             Error?.Invoke(this, e);
         }
 
-        internal void RaiseError(ErrorEventArgs e)
+        public void RaiseError(ErrorEventArgs e)
         {
             OnError(e);
         }

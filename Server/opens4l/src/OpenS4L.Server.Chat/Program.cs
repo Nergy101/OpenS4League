@@ -91,6 +91,7 @@ namespace OpenS4L.Server.Chat
                         .Configure<ServerListOptions>(context.Configuration.GetSection(nameof(AppOptions.ServerList)))
                         .Configure<DatabaseOptions>(context.Configuration.GetSection(nameof(AppOptions.Database)))
                         .Configure<MetricsOptions>(context.Configuration.GetSection(nameof(AppOptions.Metrics)))
+                        .Configure<MailOptions>(context.Configuration.GetSection(nameof(AppOptions.Mail)))
                         .Configure<IdGeneratorOptions>(x => x.Id = 1)
                         .AddSingleton<DatabaseService>()
                         .AddDbContext<AuthContext>(x => x.UseNpgsql(appOptions.Database.ConnectionStrings.Auth))

@@ -133,26 +133,22 @@ namespace OpenS4L.Server.Game.Handlers
                         return true;
                 }
 
-                try
+                for (var i = 0; i < count; ++i)
                 {
                     var effects = Array.Empty<uint>();
                     if (shopItemInfo.EffectGroup.Effects.Count > 0)
                         effects = shopItemInfo.EffectGroup.Effects.Select(x => x.Effect).Where(x => x != 0).ToArray();
 
-                    for (var i = 0; i < count; ++i)
+                    var result = plr.Inventory.TryCreate(shopItemInfo, priceInfo, itemToBuy.Color, effects,
+                        out var newItem);
+                    if (result != PlayerInventory.CreateError.None)
                     {
-                        var newItem = plr.Inventory.Create(
-                            shopItemInfo,
-                            priceInfo,
-                            itemToBuy.Color,
-                            effects
-                        );
-                        newItems.Add(newItem);
+                        logger.Error("Unable to create item {ItemNumber} error={Error}",
+                            itemToBuy.ItemNumber, result);
+                        break;
                     }
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, "Unable to create item");
+
+                    newItems.Add(newItem);
                 }
 
                 var newItemIds = newItems.Select(x => x.Id).ToArray();

@@ -9,12 +9,12 @@ namespace ProudNet.DotNetty.Handlers
     internal class ErrorHandler : ChannelHandlerAdapter
     {
         private readonly ILogger _logger;
-        private readonly ProudNetServerService _server;
+        private readonly IProudNetServerService _server;
 
         public ErrorHandler(ILogger<ErrorHandler> logger, IProudNetServerService server)
         {
             _logger = logger;
-            _server = (ProudNetServerService)server; // TODO This is bad and should be changed
+            _server = server;
         }
 
         public override void ExceptionCaught(IChannelHandlerContext context, Exception exception)

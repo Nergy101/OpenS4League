@@ -72,23 +72,68 @@ namespace OpenS4L.Server.Game
         }
 
         /// <summary>
+        /// Error codes for item creation failures.
+        /// </summary>
+        public enum CreateError
+        {
+            /// <summary>Item was created successfully.</summary>
+            None = 0,
+            /// <summary>No shop item info exists for the given item number / price type.</summary>
+            ItemNotFound = 1,
+            /// <summary>No price exists for the given period type / period.</summary>
+            PriceNotFound = 2
+        }
+
+        /// <summary>
+        /// Creates a new item, returning an error code instead of throwing.
+        /// </summary>
+        public CreateError TryCreate(ItemNumber itemNumber, ItemPriceType priceType, ItemPeriodType periodType,
+            ushort period, byte color, uint[] effects, uint count, out PlayerItem item)
+        {
+            item = null;
+
+            var shopItemInfo = _gameDataService.GetShopItemInfo(itemNumber, priceType);
+            if (shopItemInfo == null)
+                return CreateError.ItemNotFound;
+
+            var price = shopItemInfo.PriceGroup.GetPrice(periodType, period);
+            if (price == null)
+                return CreateError.PriceNotFound;
+
+            item = Create(shopItemInfo, price, color, effects);
+            return CreateError.None;
+        }
+
+        /// <summary>
+        /// Creates a new item, returning an error code instead of throwing.
+        /// </summary>
+        public CreateError TryCreate(ShopItemInfo shopItemInfo, ShopPrice price, byte color, uint[] effects,
+            out PlayerItem item)
+        {
+            item = null;
+
+            if (shopItemInfo == null)
+                return CreateError.ItemNotFound;
+
+            if (price == null)
+                return CreateError.PriceNotFound;
+
+            item = Create(shopItemInfo, price, color, effects);
+            return CreateError.None;
+        }
+
+        /// <summary>
         /// Creates a new item
         /// </summary>
         /// <exception cref="ArgumentException"></exception>
         public PlayerItem Create(ItemNumber itemNumber, ItemPriceType priceType, ItemPeriodType periodType, ushort period,
             byte color, uint[] effects, uint count, bool sendUpdate = true)
         {
-            // TODO Remove exceptions and instead return a error code
+            var result = TryCreate(itemNumber, priceType, periodType, period, color, effects, count, out var item);
+            if (result != CreateError.None)
+                throw new ArgumentException(result.ToString());
 
-            var shopItemInfo = _gameDataService.GetShopItemInfo(itemNumber, priceType);
-            if (shopItemInfo == null)
-                throw new ArgumentException("Item not found");
-
-            var price = shopItemInfo.PriceGroup.GetPrice(periodType, period);
-            if (price == null)
-                throw new ArgumentException("Price not found");
-
-            return Create(shopItemInfo, price, color, effects, sendUpdate);
+            return item;
         }
 
         /// <summary>

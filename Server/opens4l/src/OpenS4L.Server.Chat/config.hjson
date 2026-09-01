@@ -28,4 +28,10 @@
     Directory: logs
     Level: Debug
   }
+  Mail:
+  {
+    MaxTitleLength: 100
+    MaxMessageLength: 112
+    ExpiryDays: 30
+  }
 }

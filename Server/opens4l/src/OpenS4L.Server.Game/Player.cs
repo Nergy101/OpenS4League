@@ -341,16 +341,12 @@ namespace OpenS4L.Server.Game
             var slotCouponCount = Inventory.Count(x => x.ItemNumber == (ItemNumber)6000015);
             for (var i = slotCouponCount; i < 2; i++)
             {
-                // Guard: only grant the slot coupon if the shop actually carries it. If it isn't
-                // in GameDataService.ShopItems (e.g. the shop reload didn't include it), creating
-                // it would throw "Item not found" and crash the whole login (a bot/player on
-                // re-login would be disconnected). The coupon just unlocks extra character slots,
-                // so skipping it is safe rather than fatal.
-                if (_gameDataService.GetShopItemInfo((ItemNumber)6000015, ItemPriceType.PEN) == null)
+                // Guard: if the coupon isn't in GameDataService.ShopItems (e.g. the shop reload
+                // didn't include it), creation would fail — skip it rather than crash the login.
+                // The coupon just unlocks extra character slots, so skipping is safe.
+                if (Inventory.TryCreate((ItemNumber)6000015, ItemPriceType.PEN, ItemPeriodType.None, 0, 0,
+                        Array.Empty<uint>(), 1, out _) != PlayerInventory.CreateError.None)
                     break;
-
-                Inventory.Create((ItemNumber)6000015, ItemPriceType.PEN, ItemPeriodType.None, 0, 0,
-                    Array.Empty<uint>(), 1, false);
             }
 
             Session.Send(new ItemInventoryInfoAckMessage
