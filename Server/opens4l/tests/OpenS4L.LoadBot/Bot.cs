@@ -214,14 +214,29 @@ namespace OpenS4L.LoadBot
             Log("connecting to chat {0}", _chatEndPoint);
             await chat.Client.ConnectAsync(_chatEndPoint, ChatVersion, ct);
 
-            chat.Client.Send(new LoginReqMessage
+            // The game server sets Account.Nickname while handling CharacterFirstCreate, and
+            // ProudNet does not wait for one handler to finish before dispatching the next, so
+            // under load the nickname can still be unset when chat login arrives — the chat
+            // server then answers 3 (nickname mismatch). Retry a few times instead of failing
+            // the bot; anything else (wrong session, already logged in, server full) is final.
+            LoginAckMessage ack = null;
+            for (var attempt = 1; attempt <= 5; attempt++)
             {
-                AccountId = accountId,
-                Nickname = _nickname,
-                SessionId = sessionId
-            });
+                chat.Client.Send(new LoginReqMessage
+                {
+                    AccountId = accountId,
+                    Nickname = _nickname,
+                    SessionId = sessionId
+                });
 
-            var ack = await chat.WaitFor<LoginAckMessage>(TimeSpan.FromSeconds(10));
+                ack = await chat.WaitFor<LoginAckMessage>(TimeSpan.FromSeconds(10));
+                if (ack.Result != 3)
+                    break;
+
+                Log("chat login not ready (result 3, attempt {0}/5) — nickname not live yet", attempt);
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            }
+
             if (ack.Result != 0)
             {
                 Log("chat login failed: result {0}", ack.Result);
@@ -245,6 +260,19 @@ namespace OpenS4L.LoadBot
                         Message = $"hello from bot {Index} ({n})"
                     });
                 }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            Log("bot {0} chat quota done ({1} message(s) sent) — staying online", Index, n);
+
+            // --stay applies to chat bots too: once the message quota is sent, keep the game
+            // channel + chat session open until cancelled, so a run stays watchable for its
+            // full duration instead of ending as soon as the last message is out.
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
             }
             catch (OperationCanceledException)
             {

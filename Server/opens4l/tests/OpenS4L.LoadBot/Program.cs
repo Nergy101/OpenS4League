@@ -27,12 +27,15 @@ namespace OpenS4L.LoadBot
     ///                   [--scenario name] [scenario args...]
     ///
     /// Scenarios:
-    ///   single-channel  (default) N bots into one channel:  --count N --channel id [--user-prefix p]
-    ///   all-channels    P players in every channel:        --per-channel P [--user-prefix p]
+    ///   single-channel    (default) N bots into one channel:  --count N --channel id
+    ///   all-channels      P players in every channel:         --per-channel P
+    ///   chat              N bots chatting on the chat server: --count N [--chat-endpoint h:p]
+    ///   all-channels-chat P players per channel, M msgs each: --per-channel P --messages M
     ///
-    /// Defaults: auth=127.0.0.1:28002, game=<from server list>, pass=admin, stay=0 (forever).
-    /// For N concurrent bots you need N accounts: provision them with `make provision-bots BOTS=N`
-    /// then pass --user-prefix so each bot logs in as {prefix}{i}.
+    /// Defaults: auth=127.0.0.1:28002, game=&lt;from server list&gt;, user=admin, pass=admin,
+    /// stay=0 (forever). A single bot can use one account (--user); for N concurrent bots you
+    /// need N accounts, so provision them with `make provision-bots BOTS=N` and pass
+    /// --user-prefix so each bot logs in as {prefix}{i}.
     /// </summary>
     public static class Program
     {
@@ -156,6 +159,7 @@ namespace OpenS4L.LoadBot
             var perChannel = 0;
             var messagesPerBot = 0;
             IPEndPoint chatEndPoint = null;
+            var userSpecified = false;
 
             for (var i = 0; i < args.Length; i++)
             {
@@ -185,6 +189,11 @@ namespace OpenS4L.LoadBot
 
                     case "--pass":
                         ctx.Pass = Next(i, "--pass"); i++;
+                        break;
+
+                    case "--user":
+                        ctx.User = Next(i, "--user"); i++;
+                        userSpecified = true;
                         break;
 
                     case "--chat-endpoint":
@@ -273,6 +282,9 @@ namespace OpenS4L.LoadBot
                 }
             }
 
+            if (userSpecified && ctx.UserPrefix != null)
+                errors.Add("--user and --user-prefix are mutually exclusive");
+
             if (errors.Count > 0)
                 return (null, ctx, errors);
 
@@ -314,10 +326,14 @@ Global:
   --auth <host:port>    Auth server endpoint (default 127.0.0.1:28002)
   --game <host:port>    Game server endpoint (default: from the server list)
   --pass <pass>         Account password (default admin)
+  --user <name>         Single account every bot logs in as (default admin). All bots share it,
+                        so use it for one bot only — the game server rejects a second concurrent
+                        login for the same account (TerminateOtherConnection).
   --nick-prefix <s>     Nickname prefix (default bot)
   --stay <seconds>      Stay online N seconds then exit (0 = forever, default 0)
   --user-prefix <s>     Each bot logs in as its own account {prefix}{i} (provision with
                         `make provision-bots BOTS=N`). Needed for N concurrent bots.
+                        Mutually exclusive with --user.
 
 Scenarios:
   single-channel   N bots into one channel (default):

@@ -23,7 +23,7 @@ Part of the solution (`OpenS4L.Server.slnx`), so `make server` / `make build` bu
 directly:
 
 ```sh
-dotnet build src/OpenS4L.LoadBot/OpenS4L.LoadBot.csproj -c Release
+dotnet build tests/OpenS4L.LoadBot/OpenS4L.LoadBot.csproj -c Release
 ```
 
 ## Run (against the local stack)
@@ -33,14 +33,17 @@ From `Server/Docker` (stack must be up):
 ```sh
 make loadbot                        # 1 bot, channel 4, account admin/admin
 make loadbot BOTS=20 STAY=120       # 20 bots for 2 minutes
-make loadbot BOTS=5 CHANNEL=4 ACCOUNT=myuser PASSWORD=mypass
+make loadbot ACCOUNT=myuser PASSWORD=mypass   # 1 bot on a specific account
 
 # Scenario: 10 players in every channel (discovers channels from /channels)
 make provision-bots BOTS=110        # one account per bot
 make loadbot SCENARIO=all-channels PER_CHANNEL=10 USERPREFIX=bot STAY=180
 
 # Scenario: bots that also chat on the chat server
-make loadbot SCENARIO=chat BOTS=10 USERPREFIX=bot STAY=120
+make loadbot SCENARIO=chat BOTS=10 MESSAGES=10 USERPREFIX=bot STAY=120
+
+# Scenario: every channel populated AND every bot chatting
+make loadbot SCENARIO=all-channels-chat PER_CHANNEL=10 MESSAGES=10 USERPREFIX=bot STAY=180
 ```
 
 Directly:
@@ -48,7 +51,8 @@ Directly:
 ```sh
 dotnet run --project tests/OpenS4L.LoadBot -c Release -- --count 3 --stay 60 --channel 4
 dotnet run --project tests/OpenS4L.LoadBot -c Release -- --scenario all-channels --per-channel 10 --user-prefix bot
-dotnet run --project tests/OpenS4L.LoadBot -c Release -- --scenario chat --count 10 --user-prefix bot
+dotnet run --project tests/OpenS4L.LoadBot -c Release -- --scenario chat --count 10 --messages 10 --user-prefix bot
+dotnet run --project tests/OpenS4L.LoadBot -c Release -- --scenario all-channels-chat --per-channel 10 --messages 10 --user-prefix bot
 ```
 
 While it runs, watch the admin console / WebApi reflect the bots:
@@ -68,14 +72,16 @@ The process exits `0` when every bot reached the channel (exit `1` otherwise).
 | `--auth`          | `127.0.0.1:28002`   | Auth server endpoint |
 | `--game`          | from server list    | Game server endpoint (override for remote stacks) |
 | `--pass`          | `admin`             | Account password |
+| `--user`          | `admin`             | Single account every bot logs in as; mutually exclusive with `--user-prefix` |
 | `--count`         | `1`                 | Number of bots (1-1000) |
 | `--channel`       | `4`                 | Channel to enter |
 | `--nick-prefix`   | `bot`               | Nickname prefix (default `bot` → `bot0`, `bot1`, …) |
 | `--user-prefix`   | —                   | Each bot logs in as its own account `{prefix}{i}` (provision with `make provision-bots BOTS=N`) |
 | `--stay`          | `0`                 | Seconds to stay online (0 = forever) |
-| `--scenario`      | `single-channel`    | `single-channel` \| `all-channels` \| `chat` |
-| `--per-channel`   | `0`                 | Players per channel (for `all-channels`) |
-| `--chat-endpoint` | `127.0.0.1:28003`   | Chat server endpoint (for `chat`) |
+| `--scenario`      | `single-channel`    | `single-channel` \| `all-channels` \| `chat` \| `all-channels-chat` |
+| `--per-channel`   | `0`                 | Players per channel (for `all-channels`, `all-channels-chat`) |
+| `--messages`      | `0`                 | Chat messages per bot (for `chat`, `all-channels-chat`) |
+| `--chat-endpoint` | `127.0.0.1:28003`   | Chat server endpoint (for `chat`, `all-channels-chat`) |
 
 ## Notes / gotchas
 
@@ -84,11 +90,16 @@ The process exits `0` when every bot reached the channel (exit `1` otherwise).
   - `all-channels` — P players in every channel the game exposes (via `/channels`); with 11
     channels and P=10 that's 110 bots.
   - `chat` — N bots that also log into the chat server and send channel chat every few seconds.
-    Each bot still logs into auth + game first (needed so its player record + nickname exist, and
-    so it's registered in the game `PlayerManager` — chat login looks the player up there).
+  - `all-channels-chat` — P players in every channel, each sending `--messages` channel-chat
+    messages (the combination of the two above; with 11 channels and P=10 that's 110 chatting
+    bots).
+  - Both chat scenarios log each bot into auth + game first (needed so its player record +
+    nickname exist, and so it's registered in the game `PlayerManager` — chat login looks the
+    player up there).
 - **N concurrent bots need N accounts.** The game server rejects a second concurrent login for
   the same account (`TerminateOtherConnection`). Provision `bot0..botN-1` with
-  `make provision-bots BOTS=N`, then pass `--user-prefix bot`.
+  `make provision-bots BOTS=N`, then pass `--user-prefix bot`. `--user` (`ACCOUNT=`) sets one
+  shared account and is therefore single-bot only; the two flags are mutually exclusive.
 - **Nicknames** must obey `NickRestrictions` (length 4-30, ASCII, max 3 consecutive identical
   chars). `bot0000` is rejected (`MaxRepeat: 3`); the default `bot<i>` is fine to 999 bots.
 - **`MaxSessions`** in `config/game/config.hjson` caps concurrent game connections (default 100).

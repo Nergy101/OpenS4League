@@ -11,7 +11,7 @@
 K6_IMAGE ?= grafana/k6:latest
 TARGET_URL ?= http://host.docker.internal:22000
 
-# Load-bot scenario (single-channel | all-channels). Used by the `loadbot` target.
+# Load-bot scenario (single-channel | all-channels | chat | all-channels-chat). Used by `loadbot`.
 SCENARIO ?= single-channel
 
 COMPOSE = docker compose
@@ -108,6 +108,7 @@ loadbot: ## Simulate N real-game-protocol players (default BOTS=1, CHANNEL=4, PA
 	  --auth $(if $(AUTH),$(AUTH),127.0.0.1:28002) \
 	  $(if $(GAME),--game $(GAME),) \
 	  --pass $(if $(PASSWORD),$(PASSWORD),admin) \
+	  $(if $(ACCOUNT),--user $(ACCOUNT),) \
 	  --scenario $(SCENARIO) \
 	  $(if $(USERPREFIX),--user-prefix $(USERPREFIX),) \
 	  $(if $(NICKPREFIX),--nick-prefix $(NICKPREFIX),) \

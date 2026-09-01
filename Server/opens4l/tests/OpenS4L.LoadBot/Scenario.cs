@@ -41,6 +41,7 @@ namespace OpenS4L.LoadBot
         public IPEndPoint AuthEndPoint { get; set; } = new IPEndPoint(IPAddress.Loopback, 28002);
         public IPEndPoint GameEndPoint { get; set; }
         public string Pass { get; set; } = "admin";
+        public string User { get; set; } = "admin";
         public string UserPrefix { get; set; }
         public string NickPrefix { get; set; } = "bot";
         public int StaySeconds { get; set; }
@@ -66,7 +67,7 @@ namespace OpenS4L.LoadBot
             => Enumerable.Range(0, _count).Select(i => new BotSpec
             {
                 Index = i,
-                Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{i}" : "admin",
+                Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{i}" : ctx.User,
                 Nickname = $"{ctx.NickPrefix}{i}",
                 Channel = _channel
             }).ToArray();
@@ -103,7 +104,7 @@ namespace OpenS4L.LoadBot
                     specs.Add(new BotSpec
                     {
                         Index = idx,
-                        Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{idx}" : "admin",
+                        Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{idx}" : ctx.User,
                         Nickname = $"{ctx.NickPrefix}{idx}",
                         Channel = channel
                     });
@@ -153,7 +154,7 @@ namespace OpenS4L.LoadBot
             => Enumerable.Range(0, _count).Select(i => new BotSpec
             {
                 Index = i,
-                Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{i}" : "admin",
+                Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{i}" : ctx.User,
                 Nickname = $"{ctx.NickPrefix}{i}",
                 Channel = 1,
                 ChatEndpoint = _chatEndPoint,
@@ -197,7 +198,7 @@ namespace OpenS4L.LoadBot
                     specs.Add(new BotSpec
                     {
                         Index = idx,
-                        Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{idx}" : "admin",
+                        Username = ctx.UserPrefix != null ? $"{ctx.UserPrefix}{idx}" : ctx.User,
                         Nickname = $"{ctx.NickPrefix}{idx}",
                         Channel = channel,
                         ChatEndpoint = _chatEndPoint,
