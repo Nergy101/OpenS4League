@@ -72,7 +72,12 @@ namespace OpenS4L.Server.Chat.Handlers
                 return true;
             }
 
-            if (!response.Account.Nickname.Equals(message.Nickname))
+            // response.Account (and its Nickname) can be null even when OK: the game server
+            // answers for a live session whose nickname creation never completed, e.g. a first
+            // login on a fresh account whose CharacterFirstCreate was rejected. Dereferencing it
+            // threw an unhandled NullReferenceException that took the whole chat server down, so
+            // a missing nickname is a failed login like any other mismatch.
+            if (!string.Equals(response.Account?.Nickname, message.Nickname, StringComparison.Ordinal))
             {
                 logger.Information("Wrong login");
                 session.Send(new LoginAckMessage(3));
