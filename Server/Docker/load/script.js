@@ -11,7 +11,7 @@
 //                 22000 (host.docker.internal) so the k6 container reaches the
 //                 local stack. Override for a remote/cloud deployment:
 //                 TARGET_URL=https://game.example.com  (behind an LB, 443)
-//   LOAD_PROFILE  smoke | load | soak   (default smoke)
+//   LOAD_PROFILE  smoke | load | hundred | soak   (default smoke)
 //   VUS           virtual users (profile-specific default)
 //   DURATION      steady-state duration for soak (default 30m)
 //   ITERATIONS    per-VU iterations for smoke (default 20)

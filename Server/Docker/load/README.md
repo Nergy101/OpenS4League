@@ -7,7 +7,8 @@ read-only observability/admin endpoints every deployment serves under load: `/st
 > **Scope / honest caveat.** The four game servers (auth, chat, game, relay) speak the
 > custom **ProudNet binary protocol** over TCP/UDP, which k6 cannot drive. So these tests
 > exercise the **HTTP plane** (the WebApi and its admin/observability surface), not real
-> gameplay. Real player load would need a ProudNet bot harness — a separate effort. The
+> gameplay. For real player load use the ProudNet bot harness instead — `make loadbot`
+> (`../../opens4l/tests/OpenS4L.LoadBot`), which drives genuine protocol clients. The
 > admin write endpoints (`/admin/kick|ban|roomkick|closeroom`) are also excluded from the
 > steady-state test because they need live players and `ban` writes to the DB.
 
@@ -29,9 +30,10 @@ curl http://localhost:22000/statistics   # expect {"Uptime":...,"PlayersOnline":
 Then, from `Server/Docker`:
 
 ```sh
-make loadtest:smoke   # quick sanity: 5 VUs x 20 iterations
-make loadtest:load    # ramp to 50 VUs, hold 3m, ramp down
-make loadtest:soak    # hold 30 VUs for 30m (leak / latency-creep check)
+make loadtest-smoke     # quick sanity: 5 VUs x 20 iterations
+make loadtest-load      # ramp to 50 VUs, hold 3m, ramp down
+make loadtest-hundred   # "100 players": ramp to 100 VUs, hold 1m, ramp down
+make loadtest-soak      # hold 30 VUs for 30m (leak / latency-creep check)
 ```
 
 The default target is `http://host.docker.internal:22000` — the Docker-host alias, so the
@@ -44,7 +46,7 @@ Just point `TARGET_URL` at your deployment. The WebApi is normally fronted by a 
 balancer on 443:
 
 ```sh
-make loadtest:load TARGET_URL=https://game.example.com
+make loadtest-load TARGET_URL=https://game.example.com
 ```
 
 Run the load generator from a host that can reach it (a test VM in the same region, or CI
@@ -53,18 +55,18 @@ on a runner near the deployment). The k6 container only needs outbound HTTP(S) t
 
 ## Parameters (k6 env vars)
 
-| Var           | smoke | load    | soak        |
-|---------------|-------|---------|-------------|
-| `LOAD_PROFILE`| smoke | load    | soak        |
-| `VUS`         | 5     | 50      | 30          |
-| `DURATION`    | —     | —       | 30m         |
-| `ITERATIONS`  | 20    | —       | —           |
-| `TARGET_URL`  | local | local   | local       |
+| Var           | smoke | load    | hundred | soak        |
+|---------------|-------|---------|---------|-------------|
+| `LOAD_PROFILE`| smoke | load    | hundred | soak        |
+| `VUS`         | 5     | 50      | 100     | 30          |
+| `DURATION`    | —     | —       | —       | 30m         |
+| `ITERATIONS`  | 20    | —       | —       | —           |
+| `TARGET_URL`  | local | local   | local   | local       |
 
 Override any of them via the Makefile, e.g.:
 
 ```sh
-make loadtest:soak VUS=80 DURATION=1h TARGET_URL=https://game.example.com
+make loadtest-soak VUS=80 DURATION=1h TARGET_URL=https://game.example.com
 ```
 
 ## Thresholds
