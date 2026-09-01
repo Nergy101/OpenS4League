@@ -128,7 +128,7 @@ function ServerCard({ server, history }) {
             </div>
             <div className="stat">
               <div className="stat-num">{server.sessionsTotal != null ? server.sessionsTotal : '—'}</div>
-              <div className="stat-label">Total connects</div>
+              <div className="stat-label">Connects (this run)</div>
             </div>
             {server.key === 'Chat' && (
               <div className="stat">

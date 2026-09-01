@@ -191,26 +191,42 @@ function deriveUptime(key) {
   return Math.max(0, Math.floor((Date.now() - startMs) / 1000));
 }
 
-// Parse the newest log file(s) for ProudNet connect/disconnect events and derive
-// (a) current open sessions (connects minus disconnects) and (b) total connects seen.
+// Parse the CURRENT run of the newest log file for ProudNet connect/disconnect events and
+// derive (a) currently-open sessions and (b) connects since this server started.
+//
+// Both counters are anchored at the last server-start marker in the newest log file. Summing
+// every retained log file (which this used to do) reported all-time connects — thousands,
+// dominated by earlier days — and "open sessions" drifted permanently positive, because a
+// killed server logs connects whose matching disconnect line is never written. Totals do
+// include this dashboard's own TCP liveness probes: each poll opens a real connection.
 function deriveSessions(key) {
   const dir = logDirPath(key);
   const out = { sessions: 0, total: 0 };
   if (!fs.existsSync(dir)) return out;
-  const files = fs.readdirSync(dir)
+  const newest = fs.readdirSync(dir)
     .filter((f) => /\.json($|[^a-z0-9])/i.test(f) && fs.statSync(path.join(dir, f)).isFile())
     .map((f) => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs }))
-    .sort((a, b) => a.t - b.t);
+    .sort((a, b) => b.t - a.t)[0];
+  if (!newest) return out;
+  let data;
+  try { data = fs.readFileSync(path.join(dir, newest.f), 'utf8'); } catch { return out; }
+
+  const lines = data.split(/\r?\n/);
+  // Templates logged once per process start; scan back for the most recent one.
+  let start = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].includes('Starting - tcp=') || lines[i].includes('Starting...')) { start = i; break; }
+  }
+
   let connects = 0, disconnects = 0;
-  for (const { f } of files) {
-    let data;
-    try { data = fs.readFileSync(path.join(dir, f), 'utf8'); } catch { continue; }
-    // Scan line by line; count message templates by substring (robust to both JSON and text logs).
-    for (const line of data.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      if (line.includes('New incoming client') || line.includes('New incoming client(')) connects++;
-      else if (line.includes('disconnected')) disconnects++;
-    }
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    // Exact ProudNet SessionHandler templates. ') disconnected' matches
+    // 'Client({HostId} - {EndPoint}) disconnected' only — not the P2P template and not the
+    // game server's 'Disconnected - Saving...' line.
+    if (line.includes('New incoming client(')) connects++;
+    else if (line.includes(') disconnected')) disconnects++;
   }
   out.total = connects;
   out.sessions = Math.max(0, connects - disconnects);
