@@ -113,9 +113,10 @@ namespace OpenS4L.Server.Mapping.Tests
         [Fact]
         public void StatisticsDto_bothCtors()
         {
-            var dto = new StatisticsDto(100, 5);
+            var dto = new StatisticsDto(100, 5, 10);
             Assert.Equal(100L, dto.Uptime);
             Assert.Equal(5, dto.PlayersOnline);
+            Assert.Equal(10, dto.PeakPlayers);
             var empty = new StatisticsDto();
             Assert.Equal(0L, empty.Uptime);
         }
