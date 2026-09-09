@@ -58,8 +58,27 @@ namespace OpenS4L.Server.Game
             Player = plr;
             _logger = plr.AddContextToLogger(_logger);
 
-            foreach (var item in entity.Items.Select(x => new PlayerItem(_logger, _gameDataService, this, x)))
+            foreach (var entityItem in entity.Items)
+            {
+                PlayerItem item;
+                try
+                {
+                    item = new PlayerItem(_logger, _gameDataService, this, entityItem);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Shop data has moved on since this item was saved (e.g. a shop
+                    // reprovision regenerated shop_iteminfos.Id) - drop the orphaned item
+                    // instead of crashing the whole login.
+                    _logger.Warning(
+                        "Dropping player item Id={ItemId} - no ShopItemInfo/PriceGroup " +
+                        "matches ShopItemInfoId={ShopItemInfoId} ShopPriceId={ShopPriceId} " +
+                        "(stale shop data?)",
+                        entityItem.Id, entityItem.ShopItemInfoId, entityItem.ShopPriceId);
+                    continue;
+                }
                 _items.TryAdd(item.Id, item);
+            }
         }
 
         /// <summary>

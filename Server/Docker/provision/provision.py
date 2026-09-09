@@ -32,6 +32,7 @@ ROOT_PW = os.getenv("DB_ROOT_PASSWORD", "1234")
 ADMIN_USER = os.getenv("ADMIN_USER", "admin").lower()
 ADMIN_PASS = os.getenv("ADMIN_PASSWORD", "admin")
 ITEM_X7 = os.getenv("ITEM_X7", "/data/xml/item.x7")
+WEAPON_X7 = os.getenv("WEAPON_X7", "/data/xml/_eu_weapon.x7")
 SCHEMA_TIMEOUT = int(os.getenv("SCHEMA_TIMEOUT", "180"))
 BOT_COUNT = int(os.getenv("BOT_COUNT", "0"))
 BOT_PREFIX = os.getenv("BOT_PREFIX", "bot")
@@ -163,10 +164,47 @@ def _load_item_map():
     return items
 
 
+def _load_weapon_keys():
+    """Parse _eu_weapon.x7 into the set of item_keys that have ability data.
+
+    GameDataService.LoadWeapon logs "Missing weapon for item {id}" and falls back to an
+    all-zero ItemInfoWeapon for any weapon-category item in item.x7 with no matching entry
+    here - it never reaches the client, but it's a reliable signal that this particular
+    item's *other* client data (resource/mesh files, EU string table) is equally out of
+    sync, since real client data packs are authored as one consistent unit. Filtering the
+    shop on it keeps players from buying/equipping weapons that will never render.
+    """
+    root = ET.parse(WEAPON_X7).getroot()
+    return {int(w.get("item_key")) for w in root.findall("weapon") if w.get("item_key")}
+
+
 def apply_shop():
     items = _load_item_map()
+    weapon_keys = _load_weapon_keys()
+
+    # Weapon-category items (item_id // 1000000 == 2) with no _eu_weapon.x7 entry: see
+    # _load_weapon_keys. Skip them instead of selling something that can't render -
+    # existing players who already own one are handled by PlayerInventory dropping the
+    # now-orphaned item at login (see PlayerInventory.cs).
+    missing_weapon_data = sorted(
+        item_id for item_id in items if item_id // 1000000 == 2 and item_id not in weapon_keys
+    )
+    items = {k: v for k, v in items.items() if k not in missing_weapon_data}
 
     with connect("game") as conn, conn.cursor() as cur:
+        # shop_iteminfos.Id is referenced by player_items.ShopItemInfoId, the equip-slot
+        # FKs on player_characters, and start_items - all of them owned by data outside
+        # this script (existing players' saved inventories/characters). A reprovision used
+        # to DELETE+re-INSERT shop_iteminfos with a fresh identity value per row, so every
+        # `make provision`/`bootstrap` silently orphaned every existing player's items:
+        # the game server would throw building PlayerInventory and the client would get
+        # disconnected right after login. Snapshot the current ShopItemId -> Id mapping and
+        # reuse it below so re-running this script keeps existing IDs stable; only items
+        # that are genuinely new get a fresh Id appended after the current max.
+        cur.execute('SELECT "ShopItemId", "Id" FROM "shop_iteminfos"')
+        existing_iteminfo_ids = dict(cur.fetchall())
+        next_id = max(existing_iteminfo_ids.values(), default=0) + 1
+
         # Disable FK checks for the reload (like FOREIGN_KEY_CHECKS=0 in MySQL).
         cur.execute("SET session_replication_role = 'replica'")
         try:
@@ -187,16 +225,28 @@ def apply_shop():
                     '"LevelLimit", "RequiredMasterLevel", "IsOneTimeUse", "IsDestroyable", "MainTab", "SubTab") '
                     "VALUES (%s, %s, 0, 0, 0, 0, 0, 0, FALSE, TRUE, %s, %s)",
                     (item_id, gender, main, sub))
+                iteminfo_id = existing_iteminfo_ids.get(item_id)
+                if iteminfo_id is None:
+                    iteminfo_id = next_id
+                    next_id += 1
                 cur.execute(
                     'INSERT INTO "shop_iteminfos" '
-                    '("ShopItemId", "PriceGroupId", "EffectGroupId", "DiscountPercentage", "IsEnabled") '
-                    "VALUES (%s, 1, 1, 0, TRUE)",
-                    (item_id,))
+                    '("Id", "ShopItemId", "PriceGroupId", "EffectGroupId", "DiscountPercentage", "IsEnabled") '
+                    "VALUES (%s, %s, 1, 1, 0, TRUE)",
+                    (iteminfo_id, item_id))
+            # Explicit Ids were inserted above, so bump the identity sequence past the
+            # highest one used or the next auto-assigned (non-reprovision) insert would
+            # collide with it.
+            cur.execute('SELECT setval(pg_get_serial_sequence(%s, %s), %s)',
+                        ("shop_iteminfos", "Id", next_id - 1 if next_id > 1 else 1))
             cur.execute('INSERT INTO "shop_version" ("Id", "Version") VALUES (1, %s)',
                         (str(int(time.time())),))
         finally:
             cur.execute("SET session_replication_role = 'origin'")
     print(f"[provision] shop: {len(items)} items enabled (free, permanent, correct tabs)")
+    if missing_weapon_data:
+        print(f"[provision] shop: {len(missing_weapon_data)} weapon(s) skipped - no _eu_weapon.x7 "
+              f"data (likely won't render): {missing_weapon_data}")
 
 
 def ensure_start_items():
