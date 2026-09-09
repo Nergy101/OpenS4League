@@ -70,33 +70,39 @@ namespace OpenS4L.Server.Game.Services
                     entries.Add(entry);
                 }
 
-                if (entries.Count == 0)
-                    return;
-
-                // Coalesce by account — the latest snapshot for each player wins.
-                var latestByAccount = new Dictionary<int, PlayerSaveSnapshot>();
-                foreach (var entry in entries)
-                    latestByAccount[entry.Value.AccountId] = entry.Value;
-
-                _logger.Information("Flushing {Count} save snapshot(s) for {Accounts} player(s)...",
-                    entries.Count, latestByAccount.Count);
-
-                using (var db = _databaseService.Open<GameContext>())
+                // Nothing leased this round - fall through to reschedule below instead of
+                // returning early. An early return here used to skip the reschedule call
+                // entirely, which permanently killed the flush loop the first time it ran on
+                // an empty queue (i.e. on every normal server start) - every subsequent
+                // publish to the write-behind queue was then silently never flushed to
+                // Postgres for the rest of the process's life.
+                if (entries.Count > 0)
                 {
-                    foreach (var s in latestByAccount.Values)
+                    // Coalesce by account — the latest snapshot for each player wins.
+                    var latestByAccount = new Dictionary<int, PlayerSaveSnapshot>();
+                    foreach (var entry in entries)
+                        latestByAccount[entry.Value.AccountId] = entry.Value;
+
+                    _logger.Information("Flushing {Count} save snapshot(s) for {Accounts} player(s)...",
+                        entries.Count, latestByAccount.Count);
+
+                    using (var db = _databaseService.Open<GameContext>())
                     {
-                        PlayerSaveWriter.WritePlayer(db, s);
-                        await PlayerSaveWriter.WriteInventory(db, s);
-                        await PlayerSaveWriter.WriteCharacters(db, s);
+                        foreach (var s in latestByAccount.Values)
+                        {
+                            PlayerSaveWriter.WritePlayer(db, s);
+                            await PlayerSaveWriter.WriteInventory(db, s);
+                            await PlayerSaveWriter.WriteCharacters(db, s);
+                        }
+
+                        // One batched write for the whole flush.
+                        await db.SaveChangesAsync();
                     }
 
-                    // One batched write for the whole flush.
-                    await db.SaveChangesAsync();
+                    // Acknowledge (remove) only the entries we successfully persisted.
+                    foreach (var entry in entries)
+                        await _queue.CompleteAsync(entry);
                 }
-
-                // Acknowledge (remove) only the entries we successfully persisted.
-                foreach (var entry in entries)
-                    await _queue.CompleteAsync(entry);
             }
             catch (Exception ex)
             {
