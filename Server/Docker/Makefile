@@ -36,7 +36,15 @@ plugins: ## Stage plugin DLLs (+ config .hjson, + deps) into per-server plugins/
 	@mkdir -p plugins/auth plugins/chat plugins/game plugins/relay
 	@rm -rf plugins/auth/*.dll plugins/auth/*.hjson plugins/chat/*.dll plugins/chat/*.hjson plugins/game/*.dll plugins/game/*.hjson plugins/relay/*.dll plugins/relay/*.hjson
 	@# The bundled plugins all target the Game server (they reference OpenS4L.Server.Game).
+	@# ExamplePlugin is excluded: it's reference/demo code, not something to run alongside real
+	@# gameplay testing. Its ExamplePluginGameRule registers itself as the handler for Touchdown
+	@# mode and unconditionally cancels GameRuleStateMachine's ScheduleTrigger hook (demoing that
+	@# a plugin *can* take manual control of state timing) without ever implementing a manual
+	@# trigger to replace it - every Touchdown room then freezes forever at the post-loading
+	@# countdown ("preparing" never resolves). Load it only if you're deliberately testing the
+	@# plugin hook API itself.
 	@for d in ../opens4l/src/plugins/OpenS4L.Plugins.*; do \
+	  [ "$$(basename "$$d")" = "OpenS4L.Plugins.ExamplePlugin" ] && continue; \
 	  [ -d "$$d/bin/Release/net10.0" ] && cp "$$d"/bin/Release/net10.0/*.dll plugins/game/ 2>/dev/null; \
 	  [ -d "$$d/bin/Release/net10.0" ] && cp "$$d"/bin/Release/net10.0/*.hjson plugins/game/ 2>/dev/null; \
 	done
