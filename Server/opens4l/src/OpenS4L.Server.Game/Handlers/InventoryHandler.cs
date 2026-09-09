@@ -45,14 +45,21 @@ namespace OpenS4L.Server.Game.Handlers
                 return true;
             }
 
+            // On success, Character.Equip/UnEquip raise ItemAdded/ItemRemoved, which send the
+            // ItemUseItemAckMessage the client is waiting for. On failure nothing else responds,
+            // so always send a result here too - otherwise the client hangs indefinitely on a
+            // request the server dropped (see Character.Equip for the equip-slot-swap case this
+            // used to hit on almost every weapon change).
             switch (message.Action)
             {
                 case UseItemAction.Equip:
-                    character.Equip(item, message.EquipSlot);
+                    if (character.Equip(item, message.EquipSlot) != CharacterInventoryError.OK)
+                        session.Send(new ServerResultAckMessage(ServerResult.WearingUnusableItem));
                     break;
 
                 case UseItemAction.UnEquip:
-                    character.UnEquip(item.ItemNumber.Category, message.EquipSlot);
+                    if (character.UnEquip(item.ItemNumber.Category, message.EquipSlot) != CharacterInventoryError.OK)
+                        session.Send(new ServerResultAckMessage(ServerResult.WearingUnusableItem));
                     break;
             }
 

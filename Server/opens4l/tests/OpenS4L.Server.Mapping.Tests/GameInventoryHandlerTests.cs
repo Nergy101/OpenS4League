@@ -114,5 +114,40 @@ namespace OpenS4L.Server.Mapping.Tests
             });
             Assert.Contains(item, character.Weapons.GetItems());
         }
+
+        [Fact]
+        public async Task UseItem_equipOverOccupiedSlot_swapsAndAcknowledges()
+        {
+            var (plr, channel) = await LoginAsync(1806);
+            var (character, result) = plr.CharacterManager.Create(0, CharacterGender.Male, 0, 0, 0, 0, 0, 0);
+            Assert.Equal(CharacterCreateResult.Success, result);
+            plr.CharacterManager.Select(0);
+
+            var first = plr.Inventory.Create((ItemNumber)2010001u, ItemPriceType.PEN, ItemPeriodType.None, 0, 0, Array.Empty<uint>(), 1, false);
+            GameFixtures.SeedShopItem(_ctx.GameData, (ItemNumber)2010002u);
+            var second = plr.Inventory.Create((ItemNumber)2010002u, ItemPriceType.PEN, ItemPeriodType.None, 0, 0, Array.Empty<uint>(), 1, false);
+
+            var handler = _ctx.Get<InventoryHandler>();
+            await handler.OnHandle(new MessageContext { Session = plr.Session }, new ItemUseItemReqMessage
+            {
+                CharacterSlot = 0, ItemId = first.Id, EquipSlot = (byte)WeaponSlot.Weapon1, Action = UseItemAction.Equip
+            });
+
+            // Equipping a second weapon into the same slot must not be dropped silently: the
+            // client waits on a response to every equip request (this used to hang with
+            // SlotAlreadyInUse swallowed - see Character.Equip / InventoryHandler).
+            await handler.OnHandle(new MessageContext { Session = plr.Session }, new ItemUseItemReqMessage
+            {
+                CharacterSlot = 0, ItemId = second.Id, EquipSlot = (byte)WeaponSlot.Weapon1, Action = UseItemAction.Equip
+            });
+
+            Assert.Contains(second, character.Weapons.GetItems());
+            Assert.DoesNotContain(first, character.Weapons.GetItems());
+
+            var acks = channel.Outbound.Select(o => o.GetType().GetProperty("Message")?.GetValue(o))
+                .OfType<ItemUseItemAckMessage>().Where(a => a.Action == UseItemAction.Equip).ToArray();
+            Assert.Contains(acks, a => a.ItemId == first.Id);
+            Assert.Contains(acks, a => a.ItemId == second.Id);
+        }
     }
 }

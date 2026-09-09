@@ -161,6 +161,18 @@ namespace OpenS4L.Server.Game
                     return CharacterInventoryError.ItemNotAllowed;
             }
 
+            // Replace whatever already occupies the slot instead of failing outright. The
+            // client's equip UI is a single click on the new item ("wear this") - it never
+            // sends an explicit UnEquip for the old one first. Without this, re-equipping
+            // over an already-filled slot (e.g. swapping your primary weapon, which starts
+            // occupied by the AuthenticationHandler-granted starter weapon) returned
+            // SlotAlreadyInUse, which InventoryHandler used to drop silently - the client
+            // was then left waiting forever for an ack, appearing as a frozen/unrendered
+            // character until another weapon was selected.
+            var (existing, _) = inventory.GetItem(slot);
+            if (existing != null && existing != item)
+                inventory.Remove(slot);
+
             return inventory.Add(slot, item);
         }
 

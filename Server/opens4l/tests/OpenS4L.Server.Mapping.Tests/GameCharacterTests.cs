@@ -107,6 +107,31 @@ namespace OpenS4L.Server.Mapping.Tests
         }
 
         [Fact]
+        public async Task Character_equipOverOccupiedSlot_swapsInsteadOfFailing()
+        {
+            var plr = await LoginAsync(9202);
+            var (character, result) = plr.CharacterManager.Create(0, CharacterGender.Male, 0, 0, 0, 0, 0, 0);
+            Assert.Equal(CharacterCreateResult.Success, result);
+
+            var first = plr.Inventory.Create((ItemNumber)2010001u, ItemPriceType.PEN, ItemPeriodType.None, 0, 0, Array.Empty<uint>(), 1, false);
+            GameFixtures.SeedShopItem(_ctx.GameData, (ItemNumber)2010002u);
+            var second = plr.Inventory.Create((ItemNumber)2010002u, ItemPriceType.PEN, ItemPeriodType.None, 0, 0, Array.Empty<uint>(), 1, false);
+
+            Assert.Equal(CharacterInventoryError.OK, character.Equip(first, (byte)WeaponSlot.Weapon1));
+            Assert.Contains(first, character.Weapons.GetItems());
+
+            // Equipping a second weapon into the same, already-occupied slot must replace the
+            // first one rather than fail with SlotAlreadyInUse - the client never sends an
+            // explicit UnEquip before this (see Character.Equip / InventoryHandler for why a
+            // failure here used to hang the client indefinitely).
+            var swapErr = character.Equip(second, (byte)WeaponSlot.Weapon1);
+            Assert.Equal(CharacterInventoryError.OK, swapErr);
+            Assert.Contains(second, character.Weapons.GetItems());
+            Assert.DoesNotContain(first, character.Weapons.GetItems());
+            Assert.Null(first.CharacterInventory);
+        }
+
+        [Fact]
         public async Task Character_getAttributeValue()
         {
             var plr = await LoginAsync(9203);
