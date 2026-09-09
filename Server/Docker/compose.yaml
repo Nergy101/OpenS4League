@@ -86,7 +86,7 @@ services:
       - opens4l-clientdata:/app/data
       - ./plugins/game:/app/plugins
     ports:
-      - "127.0.0.1:28004:28004"
+      - "127.0.0.1:28104:28104"
       # WebApi plugin (serves /statistics, /rooms, /players for the admin console).
       - "127.0.0.1:22000:22000"
     depends_on:
