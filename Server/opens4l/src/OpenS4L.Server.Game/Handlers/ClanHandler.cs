@@ -14,6 +14,7 @@ namespace OpenS4L.Server.Game.Handlers
 {
     internal class ClanHandler
         : IHandle<ClubSearchReqMessage>, IHandle<ClubInfoReqMessage>, IHandle<ClubNameCheckReqMessage>,
+          IHandle<Network.Message.Game.ClubInfoReqMessage>,
           IHandle<ClubCreateReqMessage>, IHandle<ClubCloseReqMessage>, IHandle<ClubJoinConditionInfoReqMessage>,
           IHandle<ClubJoinReqMessage>, IHandle<ClubUnjoinReqMessage>, IHandle<ClubJoinWaiterInfoReqMessage>,
           IHandle<ClubAdminJoinCommandReqMessage>, IHandle<ClubNewJoinMemberInfoReqMessage>,
@@ -42,6 +43,21 @@ namespace OpenS4L.Server.Game.Handlers
             var clan = _clanManager[message.ClubId];
             session.Send(await clan.GetClubInfo());
             return true;
+        }
+
+        // Distinct from the Club-namespace ClubInfoReqMessage above (club browse/search by
+        // id) - this is the Game-namespace "my own club" request the client sends right
+        // after login. Previously unhandled, leaving the client waiting indefinitely for
+        // an ack - a likely contributor to the client giving up and closing shortly after
+        // login. PlayerClubInfoDto's fields are unreverse-engineered ("Unk1..3"); a
+        // zeroed/empty DTO is an unverified best guess at "not in a club", not a
+        // confirmed-correct payload.
+        [Firewall(typeof(MustBeLoggedIn))]
+        public Task<bool> OnHandle(MessageContext context, Network.Message.Game.ClubInfoReqMessage message)
+        {
+            var session = context.GetSession<Session>();
+            session.Send(new Network.Message.Game.ClubInfoAckMessage(new Network.Data.Game.PlayerClubInfoDto()));
+            return Task.FromResult(true);
         }
 
         [Firewall(typeof(MustBeLoggedIn))]

@@ -4,12 +4,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using Logging;
 using OpenS4L.Network.Message.Game;
+using OpenS4L.Server.Game.Rules;
 using OpenS4L.Server.Game.Services;
 using ProudNet;
 
 namespace OpenS4L.Server.Game.Handlers
 {
-    internal class ShopHandler : IHandle<ItemBuyItemReqMessage>
+    internal class ShopHandler : IHandle<ItemBuyItemReqMessage>, IHandle<RandomShopUpdateCheckReqMessage>
     {
         private readonly GameDataService _gameDataService;
         private readonly ILogger _logger;
@@ -159,6 +160,21 @@ namespace OpenS4L.Server.Game.Handlers
             }
 
             return true;
+        }
+
+        // Sent by the client right after login to check for a "random shop" (rotating
+        // gacha-style shop) update. Previously unhandled, which left the client waiting
+        // indefinitely for an ack - a likely contributor to the client giving up and
+        // closing shortly after login. RandomShopUpdateCheckAckMessage.Unk is
+        // unreverse-engineered (likely a version/checksum string the client compares
+        // against a local cache); an empty string is an unverified best guess at "no
+        // update pending", not a confirmed-correct payload.
+        [Firewall(typeof(MustBeLoggedIn))]
+        public Task<bool> OnHandle(MessageContext context, RandomShopUpdateCheckReqMessage message)
+        {
+            var session = context.GetSession<Session>();
+            session.Send(new RandomShopUpdateCheckAckMessage { Unk = string.Empty });
+            return Task.FromResult(true);
         }
     }
 }
