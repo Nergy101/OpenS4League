@@ -68,6 +68,7 @@ skipped = 0    # already up to date, untouched
 start_time = time.monotonic()
 batch_start = start_time
 batch_skipped = 0
+batch_count = 0
 number = 0
 try:
     for number, (source, descriptor) in enumerate(entries, 1):
@@ -94,14 +95,21 @@ try:
             # never loses already-upscaled work: rerunning the make target resumes from here.
             index_path.write_text(json.dumps(index, indent=2) + '\n')
 
+        batch_count += 1
         if number % 10 == 0 or number == total:
             now = time.monotonic()
             batch_time = now - batch_start
             elapsed = now - start_time
-            remaining = (elapsed / number) * (total - number) if number else 0
+            # Use the recent batch's rate, not the cumulative average since start: a run
+            # resumed after mostly-skipped (already up to date) entries would otherwise have
+            # its average dragged down by that near-instant skip time, understating the ETA
+            # once real upscale work follows.
+            rate = batch_time / batch_count if batch_count else 0
+            remaining = rate * (total - number)
             print(f'{number}/{total} {source} | batch {format_duration(batch_time)} (skipped {batch_skipped}) | elapsed {format_duration(elapsed)} | eta {format_duration(remaining)}', flush=True)
             batch_start = now
             batch_skipped = 0
+            batch_count = 0
 except KeyboardInterrupt:
     print(f'\nInterrupted at {number}/{total} — progress saved, rerun make threejs-asset-upscale to resume.', flush=True)
     sys.exit(130)

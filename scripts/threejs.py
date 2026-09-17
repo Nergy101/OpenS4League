@@ -20,13 +20,15 @@ URLS = {
     "character-viewer": f"http://127.0.0.1:{PORT}/character.html",
 }
 CONVERTER = ROOT / "Tools" / "s4l-threejs-converter"
-ARCHIVE = Path(os.environ.get(
-    "S4_CLIENT_ZIP",
-    "~/Downloads/Compressed/Standalone Server+Client Season 8 (EU v1267).zip",
-)).expanduser()
+# The client ZIP is user-supplied and never committed; there is deliberately no default.
+ARCHIVE = Path(os.environ["S4_CLIENT_ZIP"]).expanduser() if os.environ.get("S4_CLIENT_ZIP") else None
 
 
 def convert_assets() -> int:
+    if ARCHIVE is None:
+        raise RuntimeError(
+            "Set S4_CLIENT_ZIP=/path/to/your client ZIP (user-supplied client data is never committed)."
+        )
     if not ARCHIVE.is_file():
         raise RuntimeError(
             f"Client ZIP not found: {ARCHIVE}. Set S4_CLIENT_ZIP=/path/to/client.zip."
