@@ -1,7 +1,10 @@
 # OpenS4L — top-level build orchestration (Windows-first; portable dotnet commands).
 # Requires the .NET 10 SDK. On Windows use git-bash / MSYS `make`, or run the dotnet commands directly.
 
-.PHONY: help build tools admin bootstrap tool server clean cleanup test coverage
+.PHONY: help build tools admin bootstrap tool threejs server clean cleanup test coverage
+
+THREEJS_GOALS := map-viewer character-viewer
+.PHONY: $(THREEJS_GOALS)
 
 # Tool names are also phony goals so `make tool s4l-map-editor` works.
 TOOL_GOALS := s4l-resource-tool s4l-character-viewer s4l-map-editor s4l-animation-creator s4l-item-editor s4l-client-configurator s4l-client-mod-packer s4l-server-config-tool s4l-legacy-migration s4l-resource-diff s4l-localisation-editor s4l-admin-console
@@ -38,6 +41,12 @@ tool: ## List tools, or build and launch one: make tool <toolname>
 	@python3 scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))" || py scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))" || python scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))"
 
 $(TOOL_GOALS):
+	@:
+
+threejs: ## List Three.js viewers, or launch one: make threejs map-viewer
+	@python3 scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" || py scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" || python scripts/threejs.py "$(word 2,$(MAKECMDGOALS))"
+
+$(THREEJS_GOALS):
 	@:
 
 server: ## Build the .NET 10 server rebuild
