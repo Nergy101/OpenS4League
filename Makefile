@@ -3,7 +3,7 @@
 
 .PHONY: help build tools admin bootstrap tool threejs server clean cleanup test coverage
 
-THREEJS_GOALS := map-viewer character-viewer
+THREEJS_GOALS := map-viewer character-viewer convert-assets
 .PHONY: $(THREEJS_GOALS)
 
 # Tool names are also phony goals so `make tool s4l-map-editor` works.

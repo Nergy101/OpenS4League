@@ -19,6 +19,38 @@ URLS = {
     "map-viewer": f"http://127.0.0.1:{PORT}/",
     "character-viewer": f"http://127.0.0.1:{PORT}/character.html",
 }
+CONVERTER = ROOT / "Tools" / "s4l-threejs-converter"
+ARCHIVE = Path(os.environ.get(
+    "S4_CLIENT_ZIP",
+    "~/Downloads/Compressed/Standalone Server+Client Season 8 (EU v1267).zip",
+)).expanduser()
+
+
+def convert_assets() -> int:
+    if not ARCHIVE.is_file():
+        raise RuntimeError(
+            f"Client ZIP not found: {ARCHIVE}. Set S4_CLIENT_ZIP=/path/to/client.zip."
+        )
+    project = CONVERTER / "S4League.ThreeJs.Converter.csproj"
+    if not project.is_file():
+        raise RuntimeError(f"Three.js converter not found: {project}")
+    run(["dotnet", "build", "-c", "Release", str(project)])
+    run([
+        "dotnet", "run", "-c", "Release", "--no-build", "--project", str(project),
+        "--", str(ARCHIVE), "Client/Models/Maps/Station-2",
+    ])
+    run([
+        "dotnet", "run", "-c", "Release", "--no-build", "--project", str(project),
+        "--", str(ARCHIVE), "Client/Models/Characters/BasicFemale",
+        "--character", "Tools/s4l-threejs-converter/characters/female-basic.json",
+    ])
+    print("Converted map and character assets.", flush=True)
+    return 0
+
+
+def run(command: list[str], cwd: Path = ROOT) -> None:
+    print(f"\n$ {' '.join(command)}", flush=True)
+    subprocess.run(command, cwd=cwd, check=True)
 
 
 def port_is_open() -> bool:
@@ -31,6 +63,7 @@ def list_viewers() -> None:
     print("Available Three.js viewers:")
     print("  map-viewer       Station-2 map and flying camera")
     print("  character-viewer Character and wardrobe viewer")
+    print("  convert-assets  Convert the map and BasicFemale assets")
     print("\nUsage: make threejs map-viewer")
 
 
@@ -39,6 +72,8 @@ def main() -> int:
     if not viewer:
         list_viewers()
         return 0
+    if viewer == "convert-assets":
+        return convert_assets()
     if viewer not in URLS:
         print(f"Unknown Three.js viewer: {viewer}\n", file=sys.stderr)
         list_viewers()
