@@ -1,0 +1,21 @@
+{
+  "name": "Basic female",
+  "defaultBody": "female",
+  "bodies": [
+    {
+      "id": "female",
+      "label": "Female",
+      "sourceSex": "woman",
+      "skeleton": "resources/model/character/female_bip.scn",
+      "defaults": {
+        "hair": "1000002",
+        "face": "1010001",
+        "shirt": "1020001",
+        "pants": "1030001",
+        "gloves": "1040001",
+        "shoes": "1050001"
+      },
+      "importItems": ["1000002", "1010001", "1020001", "1030001", "1040001", "1050001"]
+    }
+  ]
+}

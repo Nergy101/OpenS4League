@@ -2,6 +2,9 @@
 
 A modern, self-contained rebuild of the **S4 League** server and tooling stack.
 
+**Website: <https://nergy101.github.io/OpenS4League/>** (source in `Website/`, deployed to
+GitHub Pages by `.github/workflows/deploy-website.yml`)
+
 OpenS4L is an independent project: a from-scratch **.NET 10** server (Auth, Chat, Game,
 Relay) plus a cross-platform toolkit for editing the game's resource archives, maps,
 animations, items and configs. It is an unofficial, non-commercial community emulator — see
@@ -95,7 +98,8 @@ everything around it on a modern stack. What was added or changed on top of the 
 |---|---|---|
 | `Server/` | The server source (`Server/opens4l/`) on **.NET 10** with projects/namespaces named `OpenS4L.*`, plus `Docker/` (postgres, redis, the four servers, provisioner) and `PLUGINS.md`. | Rebuild mostly done |
 | `Tools/` | Cross-platform utility tooling — a dozen v1.0 tools (see below and `Tools/README.md`). | v1.0 |
-| `Client/` | Reserved for the 2013 S4 League client (not part of the emulator). | Empty for now |
+| `Client/` | Local home for the 2013 S4 League client data plus the Three.js map/character viewers (client data itself is never committed). | Viewers v1.0 |
+| `Website/` | Project website (Fresh/Deno), deployed to [GitHub Pages](https://nergy101.github.io/OpenS4League/). | Live |
 
 ### Tools
 

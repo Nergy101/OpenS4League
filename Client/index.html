@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Station-2 · OpenS4L</title>
+  <link rel="icon" href="data:,">
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; background: #161d2a; color: #eef3fb; font: 13px system-ui, sans-serif; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    header { position: fixed; top: 20px; left: 20px; max-width: calc(100vw - 40px); padding: 16px 20px; border: 1px solid #ffffff28; background: #101923dc; border-radius: 8px; }
+    h1 { margin: 0 0 6px; font-size: 20px; font-weight: 600; } p { margin: 6px 0; color: #c0cddc; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+    button, select { font: inherit; color: inherit; background: #253548; border: 1px solid #ffffff30; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
+    button:hover { background: #374d66; } label { display: inline-flex; align-items: center; gap: 4px; }
+    footer { position: fixed; bottom: 18px; left: 20px; right: 20px; width: fit-content; background: #101923dc; padding: 8px 12px; border-radius: 4px; color: #c0cddc; }
+    #status.error { color: #ff9c91; } #crosshair { display: none; position: fixed; inset: 50% auto auto 50%; pointer-events: none; }
+  </style>
+  <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+  <header>
+    <h1>Station-2 <span style="color:#97abc2;font-weight:400">/ Three.js</span></h1>
+    <p id="status">Loading original map…</p>
+    <div class="controls">
+      <a href="./character.html" style="color:#b3c9e5">Character viewer →</a>
+      <button id="overview">Overview</button>
+      <button id="ingame">In-game view</button>
+      <button id="fly">Fly</button>
+      <select id="camera" aria-label="Original camera"><option value="">Original cameras</option></select>
+      <label><input type="checkbox" id="fog" checked> Fog</label>
+      <label><input type="checkbox" id="animation" checked> Animation</label>
+      <label><input type="checkbox" id="wireframe"> Wireframe</label>
+    </div>
+  </header>
+  <div id="crosshair">+</div>
+  <footer>Click the map to fly · mouse: look · WASD: move · Q/E: down/up · Shift: faster · Esc: release mouse</footer>
+  <script type="module" src="./src/viewer.js"></script>
+</body>
+</html>

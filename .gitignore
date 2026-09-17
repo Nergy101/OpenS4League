@@ -52,3 +52,9 @@ coverage-results/
 
 # ---- Hermes agent tooling ----
 .hermes/
+
+# ---- original client-derived material (local only, never committed) ----
+Original/
+
+# ---- local tool caches (venvs, model weights, downloads) ----
+.cache/

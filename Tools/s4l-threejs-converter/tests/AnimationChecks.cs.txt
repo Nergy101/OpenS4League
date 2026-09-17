@@ -1,0 +1,122 @@
+using System.IO.Compression;
+using System.Numerics;
+using System.Text.Json;
+using System.Reflection;
+using S4League.Scn;
+
+static class Checks
+{
+    static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
+    static void Reject(Action action, string message)
+    {
+        try { action(); } catch (InvalidDataException) { return; }
+        throw new Exception("Did not reject " + message);
+    }
+    static SceneContainer Scene(string name = "Bip01 L Hand")
+    {
+        var s = new SceneContainer(); var b = new BoneChunk(s) { Name = name }; s.Add(b);
+        b.Animation.Add(new() { Name="BASE", TransformKeyData=new() { TransformKey=new() { Translation=new(1,2,3), Scale=Vector3.One } } });
+        return s;
+    }
+    public static void Main(string[] args)
+    {
+        if (args[0] == "validation")
+        {
+            Reject(() => AnimationConverter.Channel("Bip01.position", "vector", [(1,new float[]{1,2,3}), (0,new float[]{4,5,6})], [0,0,0]), "unsorted keys");
+            Reject(() => AnimationConverter.Channel("Bip01.position", "vector", [(0,new float[]{1,2,3}), (0,new float[]{4,5,6})], [0,0,0]), "duplicate keys");
+            Reject(() => AnimationConverter.Channel("Bip01.position", "vector", [], [float.NaN,0,0]), "nonfinite static values");
+            var s = Scene(); var b=s.Bones[0];
+            b.Animation.Add(new() { Name="cycle", Copy="cycle" });
+            Reject(() => AnimationConverter.Export(s,"cycle","x"), "copy cycle");
+            b.Animation.Add(new() { Name="missing", Copy="nonexistent" });
+            Reject(() => AnimationConverter.Export(s,"missing","x"), "missing source clip");
+            b.Animation.Add(new() { Name="empty", TransformKeyData=new() { Duration=TimeSpan.FromSeconds(2) } });
+            var empty = AnimationConverter.Export(s,"empty","x");
+            Assert(empty.tracks[0].values.SequenceEqual(new float[]{1,2,3}), "null TransformKey must use BASE");
+            Console.WriteLine("sorted times, duplicate/nonfinite rejection, cycle/missing detection, BASE fallback verified");
+        }
+        else if (args[0] == "libraries")
+        {
+            var a=Scene(); var b=Scene();
+            a.Bones[0].Animation.Add(new() { Name="alias", Copy="external" });
+            b.Bones[0].Animation.Add(new() { Name="external", TransformKeyData=new() { Duration=TimeSpan.FromSeconds(2), TransformKey=new() { Translation=new(7,8,9), Scale=Vector3.One } } });
+            var method=typeof(AnimationConverter).GetMethod("ResolveLibraries", BindingFlags.NonPublic|BindingFlags.Static);
+            Assert(method != null, "Cross-library source-copy resolver is missing");
+            var libraries=new Dictionary<string,SceneContainer> { ["main.scn"]=a, ["extra.scn"]=b };
+            var data=(TransformKeyData)method!.Invoke(null, [libraries,"main.scn","Bip01 L Hand","alias",new HashSet<string>()])!;
+            Assert(data.TransformKey!.Translation == new Vector3(7,8,9), "Cross-library copy lost source values");
+            a.Bones[0].Animation.Add(new() { Name="external", TransformKeyData=new() { TransformKey=new() { Translation=new(4,5,6), Scale=Vector3.One } } });
+            data=(TransformKeyData)method.Invoke(null, [libraries,"main.scn","Bip01 L Hand","alias",new HashSet<string>()])!;
+            Assert(data.TransformKey!.Translation == new Vector3(4,5,6), "Local library must have precedence over same-name external clip");
+            Console.WriteLine("Cross-library aliases and local precedence verified");
+        }
+        else
+        {
+            using var zip=ZipFile.OpenRead(args[1]);
+            using var index=JsonDocument.Parse(File.ReadAllText(Path.Combine(args[2],"index.json")));
+            var scenes=new Dictionary<string,SceneContainer>(); int tracks=0, keys=0, baseBones=0;
+            foreach (var meta in index.RootElement.GetProperty("clips").EnumerateArray())
+            {
+                var path=meta.GetProperty("sourceScene").GetString()!;
+                if (!scenes.TryGetValue(path,out var scene))
+                {
+                    using var input=zip.GetEntry("Game/"+path)!.Open(); using var stream=new MemoryStream(); input.CopyTo(stream); stream.Position=0;
+                    scene=SceneContainer.ReadFrom(stream); Assert(stream.Position==stream.Length,"SCN wasn't fully consumed"); scenes[path]=scene;
+                }
+                string source=meta.GetProperty("sourceClip").GetString()!;
+                using var clip=JsonDocument.Parse(File.ReadAllText(Path.Combine(args[2],meta.GetProperty("url").GetString()!)));
+                var exported=clip.RootElement.GetProperty("tracks").EnumerateArray().ToDictionary(t=>t.GetProperty("name").GetString()!);
+                Assert(exported.Count==scene.Bones.Count*3,"Missing exported channels");
+                double duration=0;
+                foreach (var bone in scene.Bones)
+                {
+                    // Deliberately independent of the production export/resolver. Selected clips
+                    // currently have no Copy records; reject one until this differential reader is extended.
+                    var animation=bone.Animation.SingleOrDefault(a=>a.Name==source);
+                    if (animation==null) { animation=bone.Animation.Single(a=>a.Name=="BASE"); baseBones++; }
+                    Assert(string.IsNullOrWhiteSpace(animation.Copy),"Selected source unexpectedly contains Copy");
+                    var data=animation.TransformKeyData!; duration=Math.Max(duration,data.Duration.TotalSeconds);
+                    var key=data.TransformKey ?? bone.Animation.Single(a=>a.Name=="BASE").TransformKeyData!.TransformKey!;
+                    Compare(bone.Name+".position", key.TKey.Select(k=>(k.Duration.TotalMilliseconds/1000,new[]{k.Translation.X,k.Translation.Y,k.Translation.Z})).ToArray(), [key.Translation.X,key.Translation.Y,key.Translation.Z]);
+                    Compare(bone.Name+".quaternion", key.RKey.Select(k=>(k.Duration.TotalMilliseconds/1000,new[]{k.Rotation.X,k.Rotation.Y,k.Rotation.Z,k.Rotation.W})).ToArray(), [key.Rotation.X,key.Rotation.Y,key.Rotation.Z,key.Rotation.W]);
+                    Compare(bone.Name+".scale", key.SKey.Select(k=>(k.Duration.TotalMilliseconds/1000,new[]{k.Scale.X,k.Scale.Y,k.Scale.Z})).ToArray(), [key.Scale.X,key.Scale.Y,key.Scale.Z]);
+                }
+                Assert(clip.RootElement.GetProperty("duration").GetDouble()==duration,"Changed source duration");
+                void Compare(string name,(double time,float[] values)[] samples,float[] fallback)
+                {
+                    var t=exported[name]; var times=t.GetProperty("times").EnumerateArray().Select(x=>x.GetDouble()).ToArray();
+                    var values=t.GetProperty("values").EnumerateArray().Select(x=>x.GetSingle()).ToArray();
+                    Assert(t.GetProperty("type").GetString()==(name.EndsWith(".quaternion")?"quaternion":"vector"),"Changed track type");
+                    Assert(t.GetProperty("interpolation").GetInt32()==2301,"Changed interpolation");
+                    var expectedTimes=samples.Length==0?new double[]{0}:samples.Select(s=>s.time).ToArray();
+                    var expectedValues=samples.Length==0?fallback:samples.SelectMany(s=>s.values).ToArray();
+                    Assert(times.SequenceEqual(expectedTimes),"Source time mismatch: "+source+"/"+name);
+                    Assert(values.SequenceEqual(expectedValues),"Source value mismatch: "+source+"/"+name);
+                    Assert(times.Zip(times.Skip(1)).All(p=>p.First<p.Second),"Unsorted source times");
+                    Assert(times.All(x=>x>=0 && x<=clip.RootElement.GetProperty("duration").GetDouble()),"Out of duration");
+                    tracks++; keys+=times.Length;
+                }
+            }
+            int copies=0, copiedKeys=0, copyBaseFallbacks=0;
+            foreach (var (path, scene) in scenes)
+                foreach (var bone in scene.Bones)
+                    foreach (var alias in bone.Animation.Where(a=>!string.IsNullOrWhiteSpace(a.Copy)))
+                    {
+                        var expected=alias; var seen=new HashSet<string>();
+                        while (!string.IsNullOrWhiteSpace(expected.Copy))
+                        {
+                            Assert(seen.Add(expected.Name),"Source copy cycle");
+                            string next=expected.Copy;
+                            Assert(scene.Bones.Any(b=>b.Animation.Any(a=>a.Name==next)),"New cross-library source dependency needs independent reader support");
+                            expected=bone.Animation.SingleOrDefault(a=>a.Name==next) ?? bone.Animation.Single(a=>a.Name=="BASE");
+                        }
+                        var resolved=AnimationConverter.ResolveLibraries(scenes,path,bone.Name,alias.Name,new());
+                        Assert(ReferenceEquals(resolved,expected.TransformKeyData),"Original source copy resolved to different data");
+                        copies++; if (expected.Name=="BASE") copyBaseFallbacks++;
+                        if (resolved.TransformKey is {} k) copiedKeys+=k.TKey.Count+k.RKey.Count+k.SKey.Count;
+                    }
+            Assert(copies==index.RootElement.GetProperty("verification").GetProperty("resolvedLibraryCopies").GetInt32(),"Copy audit count mismatch");
+            Console.WriteLine(JsonSerializer.Serialize(new { verified="independent decoded source comparison",tracks,keys,baseBones,libraries=scenes.Count,copies,copiedKeys,copyBaseFallbacks }));
+        }
+    }
+}
