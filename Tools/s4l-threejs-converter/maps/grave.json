@@ -1,0 +1,5 @@
+{
+  "name": "Grave",
+  "bundle": "grave",
+  "config": "resources/mapinfo/bginfo-grave.ini"
+}

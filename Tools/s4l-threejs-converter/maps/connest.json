@@ -1,0 +1,5 @@
+{
+  "name": "Connest",
+  "bundle": "connest",
+  "config": "resources/mapinfo/bginfo-conest.ini"
+}

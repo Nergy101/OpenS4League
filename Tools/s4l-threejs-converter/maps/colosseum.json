@@ -1,0 +1,5 @@
+{
+  "name": "Colosseum",
+  "bundle": "colosseum",
+  "config": "resources/mapinfo/bginfo-colosseum.ini"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Highway",
+  "bundle": "highway",
+  "config": "resources/mapinfo/bginfo-city_highway.ini"
+}

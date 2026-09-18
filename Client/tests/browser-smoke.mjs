@@ -3,10 +3,10 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { withBrowser } from './browser-harness.mjs';
 
-const base = process.env.VIEWER_URL ?? 'http://127.0.0.1:8132';
-await withBrowser(base, 'window.station2Ready === true', async ({ cdp, evaluate, delay, errors, failedRequests }) => {
+const base = process.env.VIEWER_URL ?? 'http://127.0.0.1:8132/?map=station-2';
+await withBrowser(base, 'window.mapReady === true', async ({ cdp, evaluate, delay, errors, failedRequests }) => {
   assert.equal(await evaluate(`(() => {
-    const m = window.station2;
+    const m = window.s4map;
     const sky = m.skies[0].children[0];
     sky.geometry.computeBoundingSphere();
     const sphere = sky.geometry.boundingSphere.clone().applyMatrix4(sky.matrixWorld);
@@ -15,7 +15,7 @@ await withBrowser(base, 'window.station2Ready === true', async ({ cdp, evaluate,
   const output = new URL('../Models/Maps/Station-2/verification/', import.meta.url);
   await mkdir(output, { recursive: true });
   const report = await evaluate(`(() => {
-    const m = window.station2; let models = 0, vertices = 0, triangles = 0;
+    const m = window.s4map; let models = 0, vertices = 0, triangles = 0;
     const textures = new Set();
     m.root.traverse(n => {
       if (!n.isMesh) return;
@@ -30,47 +30,47 @@ await withBrowser(base, 'window.station2Ready === true', async ({ cdp, evaluate,
       renderer: m.renderer.getContext().getParameter(m.renderer.getContext().RENDERER) };
   })()`);
   assert.ok(report.drawCalls > 0);
-  assert.equal(report.models, await evaluate('window.station2.manifest.totals.models'));
+  assert.equal(report.models, await evaluate('window.s4map.manifest.totals.models'));
   const capture = async name => {
     await delay(600);
     const shot = await cdp('Page.captureScreenshot', { format: 'png' });
     await writeFile(new URL(name + '.png', output), Buffer.from(shot.data, 'base64'));
   };
-  await evaluate('window.station2.overview()');
+  await evaluate('window.s4map.overview()');
   await capture('overview');
-  await evaluate('window.station2.ingame()');
+  await evaluate('window.s4map.ingame()');
   await capture('ingame');
   await evaluate("document.querySelector('#camera').value = 'BROADCASTINGCAMERA_06'; document.querySelector('#camera').onchange()");
   await capture('platform');
   // Exercise real mouse capture and camera movement, not just button presence.
-  const before = await evaluate('window.station2.camera.position.toArray()');
+  const before = await evaluate('window.s4map.camera.position.toArray()');
   await cdp('Emulation.setFocusEmulationEnabled', { enabled: true });
   await cdp('Page.bringToFront');
   await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: 720, y: 450, button: 'left', clickCount: 1 });
   await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 720, y: 450, button: 'left', clickCount: 1 });
   await delay(200);
-  assert.equal(await evaluate('window.station2.fly.isLocked'), true, 'Flying camera did not capture the mouse');
+  assert.equal(await evaluate('window.s4map.fly.isLocked'), true, 'Flying camera did not capture the mouse');
   await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87 });
   await delay(350);
   await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87 });
-  const after = await evaluate('window.station2.camera.position.toArray()');
+  const after = await evaluate('window.s4map.camera.position.toArray()');
   assert.ok(Math.hypot(...after.map((n, i) => n - before[i])) > 20, 'W did not move the flying camera');
   const lowerY = after[1];
   await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'e', code: 'KeyE', windowsVirtualKeyCode: 69 });
   await delay(200);
   await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'e', code: 'KeyE', windowsVirtualKeyCode: 69 });
-  assert.ok(await evaluate('window.station2.camera.position.y') > lowerY + 20, 'E did not fly upward');
+  assert.ok(await evaluate('window.s4map.camera.position.y') > lowerY + 20, 'E did not fly upward');
   await evaluate('document.exitPointerLock()');
   await delay(100);
-  assert.equal(await evaluate('window.station2.fly.isLocked'), false);
+  assert.equal(await evaluate('window.s4map.fly.isLocked'), false);
   report.flyingCamera = { mouseCapture: true, forward: true, vertical: true, release: true };
 
   // Also produce a portable native Three.js ObjectLoader model. Runtime animation
   // stays in the SCN bundle/loader; this standalone model is its time-zero pose.
   const native = await evaluate(`(() => {
-    window.station2.update(0);
-    window.station2.root.updateMatrixWorld(true);
-    return JSON.stringify(window.station2.root.toJSON());
+    window.s4map.update(0);
+    window.s4map.root.updateMatrixWorld(true);
+    return JSON.stringify(window.s4map.root.toJSON());
   })()`);
   await writeFile(new URL('../station2.three.json', output), native);
   const roundTrip = await evaluate(`(async () => {

@@ -1,0 +1,5 @@
+{
+  "name": "Office",
+  "bundle": "office",
+  "config": "resources/mapinfo/bginfo-lily_office.ini"
+}

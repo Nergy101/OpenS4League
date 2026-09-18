@@ -1,0 +1,5 @@
+{
+  "name": "Wonderland",
+  "bundle": "wonderland",
+  "config": "resources/mapinfo/bginfo-wonderland.ini"
+}

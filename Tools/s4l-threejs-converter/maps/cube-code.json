@@ -1,0 +1,5 @@
+{
+  "name": "Cube Code",
+  "bundle": "cubecode",
+  "config": "resources/mapinfo/bginfo-wave_small.ini"
+}

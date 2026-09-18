@@ -1,0 +1,5 @@
+{
+  "name": "Cube Defence",
+  "bundle": "cubedefence",
+  "config": "resources/mapinfo/bginfo-wave_middle.ini"
+}

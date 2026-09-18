@@ -4,6 +4,11 @@
 .PHONY: help build tools admin bootstrap tool threejs server clean cleanup test coverage threejs-asset-upscale
 
 THREEJS_GOALS := map-viewer character-viewer convert-assets
+# Map recipes are accepted as goals too, so `make threejs map-viewer station-2` and
+# `make threejs convert-assets neden-1` work without teaching the Makefile about individual maps.
+# The recipes are the map identities both before and after conversion.
+THREEJS_RECIPES := $(notdir $(basename $(wildcard Tools/s4l-threejs-converter/maps/*.json)))
+THREEJS_MAP_GOALS := $(sort $(THREEJS_RECIPES))
 THREEJS_ASSET_DIR ?= Client/Models/Characters/Wardrobe
 # Path to YOUR unpacked Season-8 client ZIP. Never defaulted and never committed:
 # pass THREEJS_SOURCE_ZIP=... or export S4_CLIENT_ZIP=...
@@ -13,7 +18,7 @@ THREEJS_PYTHON ?= $(shell for p in python3.13 python3.12 python3.11 python3.10 p
 THREEJS_ESRGAN_WEIGHTS := $(THREEJS_ESRGAN_DIR)/RealESRGAN_x4plus.pth
 THREEJS_ESRGAN_PYTHON := $(THREEJS_ESRGAN_DIR)/venv/bin/python
 THREEJS_ESRGAN_URL := https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
-.PHONY: $(THREEJS_GOALS)
+.PHONY: $(THREEJS_GOALS) $(THREEJS_MAP_GOALS)
 
 # Tool names are also phony goals so `make tool s4l-map-editor` works.
 TOOL_GOALS := s4l-resource-tool s4l-character-viewer s4l-map-editor s4l-animation-creator s4l-item-editor s4l-client-configurator s4l-client-mod-packer s4l-server-config-tool s4l-legacy-migration s4l-resource-diff s4l-localisation-editor s4l-admin-console
@@ -52,10 +57,10 @@ tool: ## List tools, or build and launch one: make tool <toolname>
 $(TOOL_GOALS):
 	@:
 
-threejs: ## List Three.js viewers, or launch one: make threejs map-viewer
-	@python3 scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" || py scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" || python scripts/threejs.py "$(word 2,$(MAKECMDGOALS))"
+threejs: ## List the Three.js viewers/maps, or launch one: make threejs map-viewer [<map>]
+	@$(THREEJS_PYTHON) scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" "$(word 3,$(MAKECMDGOALS))"
 
-$(THREEJS_GOALS):
+$(THREEJS_GOALS) $(THREEJS_MAP_GOALS):
 	@:
 
 threejs-asset-upscale: ## Generate wardrobe 1x/2x/4x assets with Real-ESRGAN (needs S4_CLIENT_ZIP/THREEJS_SOURCE_ZIP)

@@ -1,0 +1,5 @@
+{
+  "name": "Temple-M",
+  "bundle": "templem",
+  "config": "resources/mapinfo/bginfo-neden00.ini"
+}

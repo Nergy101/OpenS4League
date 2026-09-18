@@ -1,0 +1,5 @@
+{
+  "name": "Nightmare",
+  "bundle": "nightmare",
+  "config": "resources/mapinfo/bginfo-nightmare_sl.ini"
+}

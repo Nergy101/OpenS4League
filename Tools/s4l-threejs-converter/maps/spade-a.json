@@ -1,0 +1,5 @@
+{
+  "name": "Spade A",
+  "bundle": "spadea",
+  "config": "resources/mapinfo/bginfo-spadea.ini"
+}

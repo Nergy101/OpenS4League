@@ -1,0 +1,5 @@
+{
+  "name": "Old School",
+  "bundle": "oldschool",
+  "config": "resources/mapinfo/bginfo-oldschool.ini"
+}

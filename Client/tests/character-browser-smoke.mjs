@@ -6,6 +6,17 @@ const base = new URL('/character.html?basic=1&noAnimations=1', process.env.VIEWE
 await withBrowser(base, 'window.characterReady === true', async ({ cdp, evaluate, delay, errors, failedRequests }) => {
   const output = new URL('../Models/Characters/BasicFemale/verification/', import.meta.url);
   await mkdir(output, { recursive: true });
+  // The project crest must actually render here too.
+  const brand = await evaluate(`(async () => {
+    const image = document.querySelector('#brand img');
+    const response = await fetch(document.querySelector('link[rel="icon"]').href);
+    return { natural: image.naturalWidth, brandText: document.querySelector('#brand span').textContent,
+      faviconStatus: response.status, faviconType: response.headers.get('content-type') };
+  })()`);
+  assert.ok(brand.natural > 0, 'The character viewer header crest did not load');
+  assert.equal(brand.brandText, 'OpenS4League');
+  assert.equal(brand.faviconStatus, 200);
+  assert.match(brand.faviconType, /image\/svg\+xml/);
   const capture = async name => {
     await delay(300);
     const image = await cdp('Page.captureScreenshot', { format: 'png' });

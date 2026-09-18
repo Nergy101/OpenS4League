@@ -1,0 +1,5 @@
+{
+  "name": "BlockBuster",
+  "bundle": "blockbuster",
+  "config": "resources/mapinfo/bginfo-sixsense.ini"
+}

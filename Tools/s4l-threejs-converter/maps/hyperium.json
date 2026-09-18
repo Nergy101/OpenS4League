@@ -1,0 +1,5 @@
+{
+  "name": "Hyperium",
+  "bundle": "hyperium",
+  "config": "resources/mapinfo/bginfo-hyperium.ini"
+}

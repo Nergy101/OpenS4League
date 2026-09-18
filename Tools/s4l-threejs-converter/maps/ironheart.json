@@ -1,0 +1,5 @@
+{
+  "name": "Ironheart",
+  "bundle": "ironheart",
+  "config": "resources/mapinfo/bginfo-ironheart.ini"
+}

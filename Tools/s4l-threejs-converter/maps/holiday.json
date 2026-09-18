@@ -1,0 +1,5 @@
+{
+  "name": "HoliDay",
+  "bundle": "holiday",
+  "config": "resources/mapinfo/bginfo-holiday.ini"
+}

@@ -34,20 +34,55 @@ from item numbers. See [Client/CHARACTERS.md](../../Client/CHARACTERS.md) for th
 future extension points, and `character-browser-smoke.mjs`, which also exports a native
 Three.js model. Character assets are locally ignored, like map assets.
 
-## Station-2 conversion
+## Map conversion
 
-From the repository root:
+One recipe per map lives in `Tools/s4l-threejs-converter/maps/` and names the map, the base
+name of its bundle files, and the map configuration the client ships for it:
+
+```json
+{
+  "name": "Neden-1",
+  "bundle": "neden1",
+  "config": "resources/mapinfo/bginfo-neden01.ini"
+}
+```
+
+The 45 recipes are derived from the client's own roster, not typed by hand:
+`xml/map.x7` lists every map with its configuration, player limit and region flags, and
+`language/xml/gameinfo_string_table.x7` holds the `MAPNAME_*` names. Regenerate them with
+
+```sh
+python3 Tools/s4l-threejs-converter/scripts/propose-map-recipes.py --archive "$S4_CLIENT_ZIP" [--write]
+```
+
+which keeps one recipe per unique map name, preferring the region-enabled configuration with
+the most players and no mode/variant token in its file name. Dev `Test`/`Random` entries and
+the single-player `Licence`/`Tutorial`/`Training Center` names are skipped, so the set is the
+roster's maps rather than its modes.
+
+From the repository root, per map:
 
 ```sh
 dotnet run -c Release --project Tools/s4l-threejs-converter -- \
   "$S4_CLIENT_ZIP" \
-  Client/Models/Maps/Station-2
+  Client/Models/Maps/Neden-1 \
+  --map Tools/s4l-threejs-converter/maps/neden-1.json
 ```
 
-This writes `station2.json`, `station2.bin`, `map-config.json`, PNG textures, and
+`make threejs convert-assets` converts every recipe; `make threejs convert-assets neden-1`
+converts one. A failing map no longer stops the batch: it is reported at the end and the
+other maps still convert.
+
+This writes `neden1.json`, `neden1.bin`, `map-config.json`, PNG textures, and
 unmodified source dependencies. Re-running overwrites generated files. Missing
 references are explicit in the manifest; ambiguous filenames and incompletely
-consumed SCNs fail the conversion.
+consumed SCNs fail the conversion. A scene the client build does not ship at all is
+recorded in `unresolved` and skipped — never substituted — and a map that resolves no
+scene fails.
+
+It also registers the map in `Client/Models/Maps/index.json`, the list the Three.js
+map viewer reads (the preview server has no directory listing). Adding a map means
+writing a recipe and converting it; nothing else has to know its files.
 
 This client's `.tga` references often resolve to existing `.dds` files. The resolver
 tries the full/context path first, then a unique basename, and only then the DDS
@@ -58,7 +93,8 @@ variant. Resolved aliases remain in the manifest.
 ```sh
 dotnet run -c Release --project Tools/s4l-threejs-converter -- \
   "$S4_CLIENT_ZIP" \
-  Client/Models/Maps/Station-2 --verify
+  Client/Models/Maps/Station-2 \
+  --map Tools/s4l-threejs-converter/maps/station-2.json --verify
 python3 -m unittest discover -s Tools/s4l-threejs-converter/tests -v
 npm --prefix Client ci
 npm --prefix Client test
@@ -67,22 +103,26 @@ npm --prefix Client test
 `--verify` does not write files. It compares every geometry channel bit-for-bit with
 freshly parsed SCNs, plus matrices, parent names, animations, material ranges, and
 SHA-256 hashes of preserved source files. The Python tests read the client ZIP from
-`S4_CLIENT_ZIP` and skip the source-anchored checks when it is unset. These tests
-intentionally require real local assets.
+`S4_CLIENT_ZIP` and skip the source-anchored checks when it is unset. They intentionally
+require real local assets. `test_source.py` runs `--verify` for every registered map, so a
+full suite run is slow (minutes) but covers the whole roster; `test_maps.py` checks the
+recipe/bundle/registry contract and runs without the archive.
 
 ## Browser verification and standalone model
 
 Start `npm --prefix Client start` in another terminal, then run:
 
 ```sh
-node Client/tests/browser-smoke.mjs
+node Client/tests/browser-smoke.mjs               # Station-2, plus its ObjectLoader export
+node Client/tests/map-browser-smoke.mjs neden-1   # any other map, by id
+node Client/tests/all-maps-browser-smoke.mjs      # every registered map, one Chrome run each
 ```
 
-The test starts a temporary Chrome instance, renders the real map, checks shader/network
-errors, exercises mouse capture and flying controls, and writes screenshots to
-`Client/Models/Maps/Station-2/verification/`. It also exports
-`Client/Models/Maps/Station-2/station2.three.json` with embedded textures and verifies
-it through a real `THREE.ObjectLoader` round trip.
+The tests start a temporary Chrome instance, render the real map, check shader/network
+errors, exercise mouse capture and flying controls, and write screenshots plus
+`browser-report.json` to `Client/Models/Maps/<Map>/verification/`. Station-2's test also
+exports `station2.three.json` with embedded textures and verifies it through a real
+`THREE.ObjectLoader` round trip.
 
 The default browser path targets Chrome on macOS. Set `CHROME_PATH` on Windows/Linux.
 Override the viewer URL with `VIEWER_URL`, or the local server port with `PORT`.

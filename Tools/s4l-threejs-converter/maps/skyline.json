@@ -1,0 +1,5 @@
+{
+  "name": "Skyline",
+  "bundle": "skyline",
+  "config": "resources/mapinfo/bginfo-skyline.ini"
+}

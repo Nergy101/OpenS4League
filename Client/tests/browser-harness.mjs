@@ -13,7 +13,8 @@ export async function withBrowser(base, readyExpression, check) {
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   try {
   let port;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // A roster-sized batch launches one Chrome per map, so allow a slow start (30 s).
+  for (let attempt = 0; attempt < 300; attempt++) {
     try { port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); break; }
     catch { await delay(100); }
   }

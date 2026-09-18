@@ -1,0 +1,5 @@
+{
+  "name": "Tunnel",
+  "bundle": "tunnel",
+  "config": "resources/mapinfo/bginfo-beginner.ini"
+}

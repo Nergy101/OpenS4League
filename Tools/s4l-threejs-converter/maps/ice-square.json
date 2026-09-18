@@ -1,0 +1,5 @@
+{
+  "name": "Ice Square",
+  "bundle": "icesquare",
+  "config": "resources/mapinfo/bginfo-rustygarden.ini"
+}

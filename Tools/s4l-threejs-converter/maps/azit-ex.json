@@ -1,0 +1,5 @@
+{
+  "name": "Azit-EX",
+  "bundle": "azitex",
+  "config": "resources/mapinfo/bginfo-azit-ex.ini"
+}

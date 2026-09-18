@@ -1,2 +1,4 @@
 # Original and converted game assets are supplied locally; never publish them.
-/Station-2/
+/*/
+# The map index is generated next to the conversions it describes.
+/index.json

@@ -1,0 +1,5 @@
+{
+  "name": "Galleon",
+  "bundle": "galleon",
+  "config": "resources/mapinfo/bginfo-galleon_ffa.ini"
+}

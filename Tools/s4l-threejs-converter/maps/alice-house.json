@@ -1,0 +1,5 @@
+{
+  "name": "Alice House",
+  "bundle": "alicehouse",
+  "config": "resources/mapinfo/bginfo-alicehouse.ini"
+}

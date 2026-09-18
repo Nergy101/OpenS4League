@@ -1,5 +1,6 @@
 """Verify converted geometry directly against the user-supplied source ZIP."""
 from pathlib import Path
+import json
 import os
 import subprocess
 import unittest
@@ -9,13 +10,21 @@ ROOT = Path(__file__).resolve().parents[3]
 ARCHIVE: str = os.environ.get('S4_CLIENT_ZIP', '')
 requires_archive = unittest.skipUnless(ARCHIVE, 'Set S4_CLIENT_ZIP to your unpacked Season-8 client ZIP')
 
+
 @requires_archive
 class SourceTests(unittest.TestCase):
-    def test_float_and_index_data_matches_original_scenes(self):
-        result = subprocess.run(['dotnet', 'run', '-c', 'Release', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--',
-                                 ARCHIVE, str(ROOT / 'Client/Models/Maps/Station-2'), '--verify'], text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('Source verification passed', result.stdout)
+    def test_geometry_matches_original_scenes_for_every_converted_map(self):
+        """Slow: re-parses every source SCN for every registered map."""
+        index = json.loads((ROOT / 'Client/Models/Maps/index.json').read_text())
+        for entry in index['maps']:
+            with self.subTest(map=entry['id']):
+                result = subprocess.run(
+                    ['dotnet', 'run', '-c', 'Release', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--',
+                     ARCHIVE, str(ROOT / 'Client/Models/Maps' / entry['directory']),
+                     '--map', str(ROOT / 'Tools/s4l-threejs-converter/maps' / (entry['id'] + '.json')), '--verify'],
+                    text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('Source verification passed', result.stdout)
 
     def test_verifier_rejects_changed_vertex_data(self):
         import tempfile
@@ -28,7 +37,7 @@ class SourceTests(unittest.TestCase):
             buffer[0] ^= 1
             (target / 'station2.bin').write_bytes(buffer)
             result = subprocess.run(['dotnet', 'run', '-c', 'Release', '--no-build', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--',
-                                     ARCHIVE, directory, '--verify'], text=True, capture_output=True)
+                                     ARCHIVE, directory, '--map', str(ROOT / 'Tools/s4l-threejs-converter/maps/station-2.json'), '--verify'], text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('Source verification failed:', result.stderr)
             self.assertIn('positions', result.stderr)

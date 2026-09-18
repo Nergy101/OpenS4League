@@ -1,0 +1,5 @@
+{
+  "name": "Bladecity",
+  "bundle": "bladecity",
+  "config": "resources/mapinfo/bginfo-bladecity.ini"
+}

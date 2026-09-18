@@ -51,5 +51,19 @@ class BundleTests(unittest.TestCase):
                 cursor += size + 12
             self.assertEqual(len(zlib.decompress(compressed)), texture['height'] * (1 + texture['width'] * 4))
 
+    def test_map_is_registered_in_the_viewer_index(self):
+        index = json.loads((ROOT / 'Client/Models/Maps/index.json').read_text())
+        self.assertEqual(index['format'], 's4-maps-index')
+        self.assertEqual(index['version'], 1)
+        entries = [m for m in index['maps'] if m['directory'] == BUNDLE.name]
+        self.assertEqual(len(entries), 1, 'Converted map is missing from Client/Models/Maps/index.json')
+        entry = entries[0]
+        manifest = json.loads((BUNDLE / entry['manifest']).read_text())
+        self.assertEqual(entry['id'], 'station-2')
+        self.assertEqual(entry['manifest'], 'station2.json')
+        self.assertEqual(entry['config'], 'map-config.json')
+        self.assertEqual(entry['bundleFormat'], manifest['format'])
+
+
 if __name__ == '__main__':
     unittest.main()

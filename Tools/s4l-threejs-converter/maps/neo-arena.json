@@ -1,0 +1,5 @@
+{
+  "name": "Neo-Arena",
+  "bundle": "neoarena",
+  "config": "resources/mapinfo/bginfo-neo_arena.ini"
+}

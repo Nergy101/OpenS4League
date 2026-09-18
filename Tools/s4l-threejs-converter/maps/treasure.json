@@ -1,0 +1,5 @@
+{
+  "name": "Treasure",
+  "bundle": "treasure",
+  "config": "resources/mapinfo/bginfo-oldmoon.ini"
+}

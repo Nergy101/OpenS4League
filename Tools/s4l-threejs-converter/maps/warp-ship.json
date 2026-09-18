@@ -1,0 +1,5 @@
+{
+  "name": "Warp-Ship",
+  "bundle": "warpship",
+  "config": "resources/mapinfo/bginfo-warpship.ini"
+}

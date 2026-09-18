@@ -1,0 +1,5 @@
+{
+  "name": "Station-2",
+  "bundle": "station2",
+  "config": "resources/mapinfo/bginfo-sstation02.ini"
+}

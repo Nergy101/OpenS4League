@@ -1,0 +1,5 @@
+{
+  "name": "OldMoon",
+  "bundle": "oldmoon",
+  "config": "resources/mapinfo/bginfo-captain_oldmoon.ini"
+}

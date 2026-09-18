@@ -1,0 +1,5 @@
+{
+  "name": "Neoniac",
+  "bundle": "neoniac",
+  "config": "resources/mapinfo/bginfo-neoniac_ffa.ini"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Square",
+  "bundle": "square",
+  "config": "resources/mapinfo/bginfo-square.ini"
+}

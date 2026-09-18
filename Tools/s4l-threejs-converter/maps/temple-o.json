@@ -1,0 +1,5 @@
+{
+  "name": "Temple-O",
+  "bundle": "templeo",
+  "config": "resources/mapinfo/bginfo-slhouse.ini"
+}

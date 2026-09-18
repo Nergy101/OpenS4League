@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Station-2 · OpenS4L</title>
-  <link rel="icon" href="data:,">
+  <title>Map viewer · OpenS4L</title>
+  <link rel="icon" type="image/svg+xml" href="./logos/os4l-crest-flat-dark.svg">
   <style>
     * { box-sizing: border-box; } body { margin: 0; background: #161d2a; color: #eef3fb; font: 13px system-ui, sans-serif; }
     canvas { display: block; width: 100vw; height: 100vh; }
@@ -13,6 +13,18 @@
     .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
     button, select { font: inherit; color: inherit; background: #253548; border: 1px solid #ffffff30; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
     button:hover { background: #374d66; } label { display: inline-flex; align-items: center; gap: 4px; }
+    .menu { position: relative; }
+    #brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #c0cddc; text-decoration: none; font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; }
+    #brand:hover { color: #eef3fb; } #brand img { display: block; }
+    #map-list { display: none; position: absolute; top: calc(100% + 6px); left: 0; width: 250px; flex-direction: column; padding: 6px; border: 1px solid #ffffff30; border-radius: 6px; background: #16202eef; box-shadow: 0 10px 26px #00000070; }
+    #map-list.open { display: flex; }
+    #map-search { flex: 0 0 auto; font: inherit; color: inherit; background: #101923; border: 1px solid #ffffff30; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; }
+    #map-items { display: flex; flex-direction: column; max-height: min(60vh, 380px); overflow-y: auto; overscroll-behavior: contain; }
+    #map-items a { flex: 0 0 auto; padding: 7px 9px; border-radius: 4px; color: #eef3fb; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #map-items a:hover, #map-items a:focus { background: #374d66; }
+    #map-items a[aria-current] { background: #253548; color: #9fd0ff; }
+    #map-items a[hidden], #map-empty[hidden] { display: none; }
+    #map-empty { margin: 4px 2px; color: #97abc2; }
     footer { position: fixed; bottom: 18px; left: 20px; right: 20px; width: fit-content; background: #101923dc; padding: 8px 12px; border-radius: 4px; color: #c0cddc; }
     #status.error { color: #ff9c91; } #crosshair { display: none; position: fixed; inset: 50% auto auto 50%; pointer-events: none; }
   </style>
@@ -20,10 +32,21 @@
 </head>
 <body>
   <header>
-    <h1>Station-2 <span style="color:#97abc2;font-weight:400">/ Three.js</span></h1>
+    <a id="brand" href="./index.html" title="OpenS4League — map viewer">
+      <img src="./logos/os4l-crest-flat-dark.svg" alt="OpenS4League" width="28" height="20">
+      <span>OpenS4League</span>
+    </a>
+    <h1><span id="map-name"></span> <span style="color:#97abc2;font-weight:400">/ Three.js</span></h1>
     <p id="status">Loading original map…</p>
     <div class="controls">
-      <a href="./character.html" style="color:#b3c9e5">Character viewer →</a>
+      <div class="menu">
+        <button id="maps" aria-haspopup="true" aria-expanded="false">Maps ▾</button>
+        <div id="map-list" role="group" aria-label="Converted maps">
+          <input id="map-search" type="search" placeholder="Search maps" autocomplete="off" aria-label="Search maps">
+          <nav id="map-items"></nav>
+          <p id="map-empty" hidden>No maps match</p>
+        </div>
+      </div>
       <button id="overview">Overview</button>
       <button id="ingame">In-game view</button>
       <button id="fly">Fly</button>

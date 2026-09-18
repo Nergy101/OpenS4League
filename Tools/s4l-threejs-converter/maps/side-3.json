@@ -1,0 +1,5 @@
+{
+  "name": "Side-3",
+  "bundle": "side3",
+  "config": "resources/mapinfo/bginfo-side3.ini"
+}

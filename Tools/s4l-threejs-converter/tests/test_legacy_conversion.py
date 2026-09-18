@@ -16,7 +16,7 @@ class LegacyConversionTests(unittest.TestCase):
     def test_legacy_modes_reexport_identical_geometry_buffers(self):
         for stem, original, arguments in (
             ('character', 'Characters/BasicFemale', ['--character', str(ROOT / 'Tools/s4l-threejs-converter/characters/female-basic.json')]),
-            ('station2', 'Maps/Station-2', []),
+            ('station2', 'Maps/Station-2', ['--map', str(ROOT / 'Tools/s4l-threejs-converter/maps/station-2.json')]),
         ):
             with self.subTest(mode=stem), tempfile.TemporaryDirectory() as directory:
                 command = ['dotnet', 'run', '-c', 'Release', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--', ARCHIVE, directory, *arguments]

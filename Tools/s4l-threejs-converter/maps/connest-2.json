@@ -1,0 +1,5 @@
+{
+  "name": "Connest-2",
+  "bundle": "connest2",
+  "config": "resources/mapinfo/bginfo-slpve.ini"
+}

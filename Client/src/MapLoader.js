@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import { loadScnAssets, scnGeometry, scnMaterials } from './ScnAssets.js';
 
-export async function loadStation2(url = './Models/Maps/Station-2/station2.json') {
-  const { manifest, buffer, textures } = await loadScnAssets(url, 's4-station2-threejs');
-  return { ...buildStation2(manifest, buffer, textures), manifest };
+/** Loads a converted SCN map bundle; `bundleFormat` is the signature the map index declares. */
+export async function loadMap(manifestUrl, bundleFormat) {
+  const { manifest, buffer, textures } = await loadScnAssets(manifestUrl, bundleFormat);
+  return { ...buildMap(manifest, buffer, textures, bundleFormat), manifest };
 }
 
-export function buildStation2(manifest, buffer, textures) {
-  if (manifest.format !== 's4-station2-threejs' || manifest.version !== 1)
-    throw new Error('Unsupported Station-2 bundle');
+export function buildMap(manifest, buffer, textures, bundleFormat) {
+  if (manifest.format !== bundleFormat || manifest.version !== 1)
+    throw new Error(`Unsupported map bundle: ${manifest.format}`);
   const root = new THREE.Group();
-  root.name = 'Station-2';
+  root.name = manifest.name ?? 'map';
   root.scale.z = -1; // One explicit handedness conversion; original units unchanged.
   const helpers = [], skies = [];
 

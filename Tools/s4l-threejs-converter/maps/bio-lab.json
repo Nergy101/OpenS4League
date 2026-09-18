@@ -1,0 +1,5 @@
+{
+  "name": "Bio-Lab",
+  "bundle": "biolab",
+  "config": "resources/mapinfo/bginfo-biolab.ini"
+}
