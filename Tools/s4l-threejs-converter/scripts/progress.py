@@ -23,25 +23,45 @@ RULE = '─' * 72
 START = time.monotonic()
 _log = None
 
-# A Windows console is often cp1252/cp437, where the glyphs above raise UnicodeEncodeError and kill an
-# hours-long run on its own banner. When the stream cannot encode a line it is transliterated instead,
-# so the same run stays legible on a wedged console rather than dying on a box-drawing character.
+# A Windows console is often cp1252/cp437, and a child's piped stdout takes that same locale codec
+# there, so the glyphs below raise UnicodeEncodeError and kill an hours-long run on its own banner.
+# When the stream at hand cannot encode a line it is transliterated instead: the same run stays
+# legible on a wedged console rather than dying on a box-drawing character. The log mirror is written
+# as UTF-8 regardless, so a line the console cannot take is still recorded in full.
 ASCII_FALLBACK = str.maketrans({'─': '-', '·': '|', '×': 'x', '…': '...', '→': '->', '—': '-', '✗': 'x'})
-_console_encoding = ''   # resolved from stdout on first use
+_stream = None           # the stream the cached encoding was resolved from
+_encoding = None
+
+def _stream_encoding() -> str | None:
+    """The encoding of the stream currently standing in for stdout, or None when it takes any str."""
+    global _stream, _encoding
+    stream = sys.stdout
+    if stream is not _stream:
+        _stream = stream
+        _encoding = getattr(stream, 'encoding', None)
+    return _encoding
+
 
 def _safe(text: str) -> str:
-    global _console_encoding
-    # Only an interactive console can reject a glyph; a pipe or a redirected file takes UTF-8 as it
-    # comes, and the log mirror is written as UTF-8 regardless. So captured output stays byte-stable.
-    if not sys.stdout.isatty():
+    # Whether a glyph survives is a property of the stream, not of `isatty()`: a pipe to a cp1252
+    # reader (a child this script spawned on Windows) rejects exactly what a cp1252 console rejects,
+    # and a StringIO takes anything. So the line is tried against the stream's own codec.
+    encoding = _stream_encoding()
+    if not encoding:
         return text
-    if not _console_encoding:
-        _console_encoding = getattr(sys.stdout, 'encoding', None) or 'ascii'
     try:
-        text.encode(_console_encoding)
-    except (UnicodeEncodeError, LookupError):
-        return text.translate(ASCII_FALLBACK)
-    return text
+        text.encode(encoding)
+        return text
+    except UnicodeEncodeError:
+        pass
+    except LookupError:
+        return text                       # an unknown codec name: nothing to transliterate against
+    translated = text.translate(ASCII_FALLBACK)
+    try:
+        translated.encode(encoding)
+        return translated
+    except UnicodeEncodeError:
+        return translated.encode(encoding, 'replace').decode(encoding, 'replace')
 
 
 def format_clock(seconds: float) -> str:
@@ -104,7 +124,12 @@ def emit(text: str = '') -> None:
     """
     prefix = '' if os.environ.get('OPENS4L_PROGRESS_PLAIN') else f'[{elapsed()}] '
     line = f'{prefix}{text}' if text else ''
-    print(_safe(line), flush=True)
+    try:
+        print(_safe(line), flush=True)
+    except UnicodeEncodeError:
+        # Last resort: a stream rejected a glyph the check above let through. No character is worth
+        # ending an hours-long run over, so the line goes out ASCII-only and the log keeps the rest.
+        print(line.translate(ASCII_FALLBACK).encode('ascii', 'replace').decode('ascii'), flush=True)
     if _log is not None:
         _log.write(line + '\n')
         _log.flush()
@@ -170,14 +195,18 @@ class Step:
         """
         parts = [str(part) for part in command]
         emit(f'[{self.tag}]   $ {" ".join(parts)}')
-        environment = dict(os.environ, OPENS4L_PROGRESS_PLAIN='1')
+        # Both ends of the pipe are pinned to UTF-8. On Windows a Python child would otherwise encode
+        # its stdout — a pipe, so there is no console to adapt to — with the locale codec (cp1252),
+        # where the report's box glyphs raise UnicodeEncodeError and end the run; and reading that
+        # pipe through the parent's locale turned `dotnet`'s UTF-8 output into `Â·` in the log.
+        environment = dict(os.environ, OPENS4L_PROGRESS_PLAIN='1', PYTHONIOENCODING='utf-8')
         # Its own session: `dotnet run` and the ESRGAN venv both spawn children, and an interrupt
         # must stop the whole tree rather than leaving an orphan writing into the asset directory.
         isolated = os.name != 'nt'
         try:
             process = subprocess.Popen(parts, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       text=True, bufsize=1, env=environment,
-                                       start_new_session=isolated, **kwargs)
+                                       text=True, encoding='utf-8', errors='replace', bufsize=1,
+                                       env=environment, start_new_session=isolated, **kwargs)
         except OSError as error:
             emit(f'[{self.tag}]   {error}')
             return 127

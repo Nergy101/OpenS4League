@@ -164,12 +164,63 @@ class StepTests(unittest.TestCase):
                 step.ok('done')
             capture(run)
             progress.close()
-            text = log.read_text()
+            # The mirror is UTF-8 whatever the parent's locale is, so a locale read would mangle '·'.
+            text = log.read_text(encoding='utf-8')
         self.assertIn('child line', text)
         self.assertIn('ok · done', text)
         for line in text.splitlines():
             if line.strip():
                 self.assertRegex(line, r'^\[\d\d:\d\d:\d\d\] ')
+
+
+class ConsoleEncodingTests(unittest.TestCase):
+    """The report draws box glyphs, and it has to survive every stream it is pointed at.
+
+    A Windows console is cp1252/cp437, and a Python child's stdout is a pipe that takes the locale
+    codec there, so printing a rule could raise UnicodeEncodeError and end an hours-long run on its
+    own banner. A glyph the stream cannot encode is transliterated instead, and a stream that speaks
+    UTF-8 (which is what `dotnet` writes into the pipe) has its output decoded as UTF-8 rather than
+    through the parent's locale, which used to turn `·` into `Â·` in the log.
+    """
+
+    def tearDown(self):
+        progress.set_log(None)
+
+    def test_a_stream_that_cannot_encode_the_rule_transliterates_it(self):
+        stream = io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+        with contextlib.redirect_stdout(stream):
+            progress.header('Real-ESRGAN colour/alpha levels', [('bundle', 'wardrobe')])
+            progress.emit('levels 1x,4x → colour/alpha · x4')
+            stream.flush()
+            written = stream.detach().getvalue().decode('cp1252')
+        self.assertIn('-' * 72, written)
+        self.assertIn('colour/alpha', written)
+        self.assertIn('->', written)
+
+    def test_a_python_child_on_a_cp1252_pipe_reports_its_banner_instead_of_dying(self):
+        # The exact failure: the Real-ESRGAN venv runs Python 3.12, whose piped stdout is cp1252.
+        child = (f'import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import progress; '
+                 'progress.header("Real-ESRGAN colour/alpha levels", [("bundle", "wardrobe")])')
+        environment = dict(os.environ, PYTHONIOENCODING='cp1252')
+        result = subprocess.run([sys.executable, '-c', child], capture_output=True, text=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('-' * 72, result.stdout)
+
+    def test_streamed_child_utf8_is_not_read_through_the_parent_locale(self):
+        child = 'print("textures 1 decoded · scenes 0 exported")'
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / 'run.log'
+            progress.set_log(log)
+
+            def run():
+                return Step(5, 6, 'Wardrobe conversion').stream([sys.executable, '-c', child])
+            code, _ = capture(run)
+            progress.close()
+            # The mirror is written as UTF-8 whatever the parent's locale is (`set_log` opens it that
+            # way), so it is read back the same way.
+            text = log.read_text(encoding='utf-8')
+        self.assertEqual(code, 0)
+        self.assertIn('textures 1 decoded · scenes 0 exported', text)
 
 
 class DriverTests(unittest.TestCase):
@@ -193,7 +244,7 @@ class DriverTests(unittest.TestCase):
             self.assertIn('FAILED (exit 1)', result.stdout)
             logs = list(Path(directory, 'logs').glob('upscale-*.log'))
             self.assertEqual(len(logs), 1)
-            self.assertIn('FAILED (exit 1)', logs[0].read_text())
+            self.assertIn('FAILED (exit 1)', logs[0].read_text(encoding='utf-8'))
             # Every line the driver prints is timestamped, so a captured log can be read back.
             for line in result.stdout.splitlines():
                 if line.strip():
@@ -206,7 +257,7 @@ class DriverTests(unittest.TestCase):
                                      '--assets', directory, '--cache', directory, '--log', str(log))
             self.assertEqual(result.returncode, 1)
             self.assertTrue(log.is_file())
-            self.assertIn('stopped in phase 1/6', log.read_text())
+            self.assertIn('stopped in phase 1/6', log.read_text(encoding='utf-8'))
 
     @requires_archive
     def test_an_interrupted_phase_summary_ends_with_the_resume_hint(self):
@@ -229,7 +280,7 @@ class DriverTests(unittest.TestCase):
             self.assertIn('rerun `make threejs-asset-upscale` to resume', output)
             logs = list(Path(directory, 'cache', 'logs').glob('upscale-*.log'))
             self.assertEqual(len(logs), 1)
-            self.assertRegex(logs[0].read_text(), r'interrupted in phase \d/6 after')
+            self.assertRegex(logs[0].read_text(encoding='utf-8'), r'interrupted in phase \d/6 after')
 
 
 class PruneTests(unittest.TestCase):
