@@ -72,10 +72,10 @@ $(THREEJS_GOALS) $(THREEJS_MAP_GOALS):
 	@:
 
 threejs-asset-upscale: ## Generate the wardrobe 1x/4x levels, then the Real-ESRGAN 4x color+alpha (needs S4_CLIENT_ZIP/THREEJS_SOURCE_ZIP)
-	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/upscale-assets.py --source "$(THREEJS_SOURCE_ZIP)" --assets "$(THREEJS_ASSET_DIR)" --cache "$(THREEJS_ESRGAN_DIR)" --python "$(PYTHON)" $(if $(THREEJS_UPSCALE_LOG),--log "$(THREEJS_UPSCALE_LOG)",)
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/upscale-assets.py --source "$(THREEJS_SOURCE_ZIP)" --assets "$(THREEJS_ASSET_DIR)" --cache "$(THREEJS_ESRGAN_DIR)" --python "$(PYTHON)" $(if $(TORCH_INDEX),--torch-index-url "$(TORCH_INDEX)",) $(if $(THREEJS_UPSCALE_LOG),--log "$(THREEJS_UPSCALE_LOG)",)
 
 threejs-map-upscale: ## Generate one map's 1x/4x levels, then its Real-ESRGAN 4x color+alpha: make threejs-map-upscale MAP=station-2
-	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/upscale-assets.py --map "$(MAP)" --source "$(THREEJS_SOURCE_ZIP)" --cache "$(THREEJS_ESRGAN_DIR)" --python "$(PYTHON)" $(if $(THREEJS_UPSCALE_LOG),--log "$(THREEJS_UPSCALE_LOG)",)
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/upscale-assets.py --map "$(MAP)" --source "$(THREEJS_SOURCE_ZIP)" --cache "$(THREEJS_ESRGAN_DIR)" --python "$(PYTHON)" $(if $(TORCH_INDEX),--torch-index-url "$(TORCH_INDEX)",) $(if $(THREEJS_UPSCALE_LOG),--log "$(THREEJS_UPSCALE_LOG)",)
 
 threejs-map-encode: ## Re-encode a map's generated level as AVIF/WebP: make threejs-map-encode MAP=station-2 [FORMAT=avif] [IN_PLACE=1]
 	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/encode-texture-levels.py --map "$(MAP)" --format "$(if $(FORMAT),$(FORMAT),avif)" $(if $(QUALITY),--quality "$(QUALITY)",) $(if $(KINDS),--kinds "$(KINDS)",) $(if $(IN_PLACE),--in-place,)
@@ -84,7 +84,7 @@ threejs-asset-encode: ## Re-encode the wardrobe's 4x levels as AVIF/WebP in plac
 	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/encode-texture-levels.py "$(THREEJS_ASSET_DIR)" --manifest index.json --in-place --format "$(if $(FORMAT),$(FORMAT),avif)" --kinds "$(if $(KINDS),$(KINDS),color,alpha,lightmap,normal)"
 
 threejs-avif-all: ## Every asset to its final state (4x pass + AVIF in place, wardrobe + every map): make threejs-avif-all [ONLY=wardrobe|maps] [MAP=station-2] [DRY_RUN=1]
-	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/avif-pass-all.py $(if $(THREEJS_SOURCE_ZIP),--source "$(THREEJS_SOURCE_ZIP)",) --format "$(if $(FORMAT),$(FORMAT),avif)" --python "$(PYTHON)" $(if $(filter wardrobe,$(ONLY)),--skip-maps,) $(if $(filter maps,$(ONLY)),--skip-wardrobe,) $(if $(MAP),--map "$(MAP)",) $(if $(LOG),--log "$(LOG)",) $(if $(REPORT),--report "$(REPORT)",) $(if $(DRY_RUN),--dry-run,)
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/avif-pass-all.py $(if $(THREEJS_SOURCE_ZIP),--source "$(THREEJS_SOURCE_ZIP)",) --format "$(if $(FORMAT),$(FORMAT),avif)" --python "$(PYTHON)" $(if $(TORCH_INDEX),--torch-index-url "$(TORCH_INDEX)",) $(if $(filter wardrobe,$(ONLY)),--skip-maps,) $(if $(filter maps,$(ONLY)),--skip-wardrobe,) $(if $(MAP),--map "$(MAP)",) $(if $(LOG),--log "$(LOG)",) $(if $(REPORT),--report "$(REPORT)",) $(if $(DRY_RUN),--dry-run,)
 
 server: ## Build the .NET 10 server rebuild
 	$(MAKE) -C Server build

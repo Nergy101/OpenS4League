@@ -37,6 +37,50 @@ def capture(callable_):
     return result, buffer.getvalue()
 
 
+class TorchPlanTests(unittest.TestCase):
+    """`--print-plan` says which torch wheel a machine would install. The CUDA cases matter because
+    pip's default is the CPU-only wheel on Windows and Linux: without this, a GPU laptop runs the 4x
+    pass on one core and looks merely slow rather than misconfigured."""
+
+    def plan(self, platform=None, cuda=None, *extra):
+        environment = dict(os.environ)
+        environment.pop('OPENS4L_PLATFORM', None)
+        environment.pop('OPENS4L_CUDA', None)
+        if platform is not None:
+            environment['OPENS4L_PLATFORM'] = platform
+        if cuda is not None:
+            environment['OPENS4L_CUDA'] = cuda
+        return subprocess.run([sys.executable, str(DRIVER), '--print-plan', *extra],
+                              capture_output=True, text=True, env=environment)
+
+    def test_macos_keeps_the_default_wheel_because_it_carries_mps(self):
+        result = self.plan('darwin', '0')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('the default PyPI wheel', result.stdout)
+
+    def test_windows_without_an_nvidia_gpu_keeps_the_default_cpu_wheel(self):
+        result = self.plan('win32', '0')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('the default PyPI wheel', result.stdout)
+
+    def test_windows_with_an_nvidia_gpu_installs_torch_from_the_cuda_index(self):
+        result = self.plan('win32', '1')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('https://download.pytorch.org/whl/cu124', result.stdout)
+        self.assertIn('--index-url', result.stdout)
+        self.assertIn('torch torchvision', result.stdout)
+
+    def test_an_older_driver_can_name_its_own_index(self):
+        result = self.plan('win32', '1', '--torch-index-url', 'https://download.pytorch.org/whl/cu121')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('https://download.pytorch.org/whl/cu121', result.stdout)
+        self.assertNotIn('cu124', result.stdout)
+
+    def test_the_plan_needs_no_client_archive(self):
+        result = self.plan('linux', '0')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 class FormatTests(unittest.TestCase):
     def test_elapsed_clock_and_durations_read_the_way_a_long_log_needs(self):
         self.assertEqual(progress.format_clock(0), '00:00:00')

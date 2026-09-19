@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -45,7 +46,7 @@ REQUIRED_LEVELS = '1x,4x'
 PHASES = 6
 
 parser = argparse.ArgumentParser(description='Run a Three.js texture-upscale pipeline with a structured progress log.')
-parser.add_argument('--source', type=Path, required=True, help='your unpacked Season-8 client ZIP (never committed)')
+parser.add_argument('--source', type=Path, default=None, help='your unpacked Season-8 client ZIP (never committed)')
 parser.add_argument('--map', default=None,
                     help="convert and upscale one map (its recipe stem, e.g. station-2) instead of the wardrobe")
 parser.add_argument('--assets', type=Path, default=ROOT / 'Client/Models/Characters/Wardrobe',
@@ -54,7 +55,68 @@ parser.add_argument('--cache', type=Path, default=ROOT / '.cache/opens4l-realesr
 parser.add_argument('--python', type=Path, default=Path(sys.executable), help='interpreter used to create the Real-ESRGAN venv')
 parser.add_argument('--log', type=Path, default=None,
                     help='log file (default: <cache>/logs/upscale-<timestamp>.log; every line is written there too)')
+parser.add_argument('--torch-index-url', default=None,
+                    help='pip index for the torch wheel, overriding the detection (e.g. '
+                         'https://download.pytorch.org/whl/cu121 for an older driver)')
+parser.add_argument('--print-plan', action='store_true',
+                    help='print which torch wheel this machine would install and exit (no archive needed)')
 args = parser.parse_args()
+
+# A machine with an NVIDIA GPU must get torch from the CUDA index: pip's default is the CPU-only wheel
+# on Windows and Linux, which turns the 4x pass into a crawl with no hint why. macOS is left alone —
+# its default wheel already carries MPS. Set OPENS4L_PLATFORM/OPENS4L_CUDA to preview another machine's
+# plan (`--print-plan`), which is also what the tests assert against.
+TORCH_CUDA_INDEX = 'https://download.pytorch.org/whl/cu124'
+
+
+def platform_name() -> str:
+    return os.environ.get('OPENS4L_PLATFORM') or sys.platform
+
+
+def cuda_gpu_present() -> bool:
+    """True when the driver reports an NVIDIA GPU. nvidia-smi ships with the driver on Windows and
+    Linux; without a driver a CUDA wheel would not run anyway, so its absence is a valid 'no'."""
+    override = os.environ.get('OPENS4L_CUDA')
+    if override in ('0', '1'):
+        return override == '1'
+    smi = shutil.which('nvidia-smi')
+    if smi is None:
+        return False
+    try:
+        listed = subprocess.run([smi, '-L'], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return listed.returncode == 0 and 'GPU' in listed.stdout
+
+
+def torch_cuda_available(venv_python: Path) -> bool:
+    """Whether the venv's installed torch already has CUDA. A missing torch answers False."""
+    if not venv_python.exists():
+        return False
+    try:
+        result = subprocess.run([str(venv_python), '-c', 'import torch;print(int(torch.cuda.is_available()))'],
+                                capture_output=True, text=True, timeout=180)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and result.stdout.strip() == '1'
+
+
+def torch_install_plan(platform: str, cuda_gpu: bool, override: str | None, installed_cuda: bool) -> list[str] | None:
+    """The pip arguments that put the right torch in the venv, or None when the default wheel is right."""
+    if platform == 'darwin' or not cuda_gpu:
+        return None
+    if installed_cuda and override is None:
+        return None
+    return ['-m', 'pip', 'install', '--index-url', override or TORCH_CUDA_INDEX, '--upgrade', 'torch', 'torchvision']
+
+
+if args.print_plan:
+    cuda = cuda_gpu_present()
+    plan = torch_install_plan(platform_name(), cuda, args.torch_index_url, installed_cuda=False)
+    print(f'  platform        {platform_name()}')
+    print(f'  nvidia gpu      {"yes" if cuda else "no"}')
+    print(f'  torch wheel     {" ".join(plan) if plan else "the default PyPI wheel (CPU on Windows/Linux, MPS on macOS)"}')
+    raise SystemExit(0)
 
 
 def resolve_map(stem: str) -> tuple[Path, str]:
@@ -189,8 +251,8 @@ def main() -> int:
 
     # 1 — the source archive is user-supplied and never committed, so it is validated up front.
     step = next_step('Source archive')
-    if not args.source.is_file():
-        step.failed(1, f'not found: {args.source}. Set S4_CLIENT_ZIP=/path/to/your Season-8 client ZIP.')
+    if args.source is None or not args.source.is_file():
+        step.failed(1, f'not found: {args.source or "not set"}. Set S4_CLIENT_ZIP=/path/to/your Season-8 client ZIP.')
         return finish(1)
     step.ok(f'{format_size(args.source.stat().st_size)}')
 
@@ -211,8 +273,23 @@ def main() -> int:
         step.failed(1, f'could not create a venv with {relative(args.python)}')
         return finish(1)
 
-    # 3 — the pin is a marker file so an existing environment is never reinstalled every run.
+    # 3 — torch first, then the pinned packages behind a marker file so an existing environment is
+    # never reinstalled every run. The torch step is *not* behind the marker: a venv that bootstrapped
+    # before the GPU was set up holds the CPU wheel, and pip would never replace it on its own.
     step = next_step('Real-ESRGAN packages')
+    install = torch_install_plan(platform_name(), cuda_gpu_present(), args.torch_index_url,
+                                 torch_cuda_available(venv_python))
+    if install is None:
+        step.note('torch: the default wheel is the right one here'
+                  if platform_name() == 'darwin' or not cuda_gpu_present()
+                  else 'torch: already built with CUDA')
+    elif step.stream([venv_python, *install]) == 0:
+        step.ok(f'torch installed from {args.torch_index_url or TORCH_CUDA_INDEX}')
+    else:
+        step.failed(1, 'installing the CUDA torch wheel failed; see its output above. An older driver '
+                       'may need an earlier index, e.g. --torch-index-url '
+                       'https://download.pytorch.org/whl/cu121')
+        return finish(1)
     if (cache / '.installed').is_file():
         step.ok('already installed (realesrgan==0.3.0; remove .installed to reinstall)')
     elif step.stream([venv_python, '-m', 'pip', 'install', '--upgrade', 'pip', 'realesrgan==0.3.0']) == 0:

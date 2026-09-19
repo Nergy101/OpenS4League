@@ -40,6 +40,8 @@ parser = argparse.ArgumentParser(description='Run the Real-ESRGAN 4x pass and th
 parser.add_argument('--source', type=Path, help='your unpacked Season-8 client ZIP (needed when a 4x pass still has to run)')
 parser.add_argument('--python', type=Path, default=Path(sys.executable),
                     help='interpreter for the child passes (default: the one running this script)')
+parser.add_argument('--torch-index-url', default=None,
+                    help='pip index for the torch wheel on a GPU machine (passed to the 4x pass)')
 parser.add_argument('--format', choices=('avif', 'webp'), default='avif')
 parser.add_argument('--log', type=Path, default=Path('/tmp/opens4l-avif-pass.log'))
 parser.add_argument('--report', type=Path, default=Path('/tmp/opens4l-avif-pass.json'))
@@ -210,7 +212,8 @@ for label, bundle, manifest_name, kinds in assets:
     if needs_four_x(bundle, manifest_name):
         code = run(f'{label}: Real-ESRGAN 4x pass',
                    [args.python, SCRIPTS / 'upscale-assets.py', '--map', label, '--source', args.source,
-                    '--python', args.python, '--log', args.log.with_suffix(f'.{label}.upscale.log')])
+                    '--python', args.python, '--log', args.log.with_suffix(f'.{label}.upscale.log'),
+                    *(('--torch-index-url', args.torch_index_url) if args.torch_index_url else ())])
         if code != 0:
             failures.append(f'{label} (4x pass, exit {code})')
             results.append({'asset': label, 'status': 'failed at 4x pass', 'exit': code})
