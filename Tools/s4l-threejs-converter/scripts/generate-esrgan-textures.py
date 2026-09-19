@@ -58,9 +58,30 @@ if not args.weights.is_file():
 
 index_path = args.root / args.manifest
 index = json.loads(index_path.read_text())
-device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+
+
+def preferred_device() -> torch.device:
+    """CUDA first, then Apple silicon's MPS, then the CPU.
+
+    `make threejs-asset-upscale` installs the *CUDA* torch wheel on a machine with an NVIDIA GPU, so
+    an available CUDA device is the one this pass is meant to run on: the 4x inference on a few
+    thousand textures is GPU work, and running it on the CPU turns a pass that finishes in minutes
+    into one that takes hours.
+    """
+    if torch.cuda.is_available():
+        return torch.device('cuda')
+    if torch.backends.mps.is_available():
+        return torch.device('mps')
+    return torch.device('cpu')
+
+
+device = preferred_device()
+# Tiling bounds the memory one inference pass needs. `--tile 0` (the default) is fine on the CPU and
+# on MPS, but a 1024x1024 source becomes a 4096x4096 output and that does not fit a consumer card in
+# fp32, so CUDA gets a conservative tile unless the caller chose one.
+tile = args.tile if args.tile or device.type != 'cuda' else 512
 model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-upsampler = RealESRGANer(scale=4, model_path=str(args.weights), model=model, tile=args.tile, tile_pad=10, pre_pad=0, half=False, device=device)
+upsampler = RealESRGANer(scale=4, model_path=str(args.weights), model=model, tile=tile, tile_pad=10, pre_pad=0, half=False, device=device)
 
 
 def sha(path):
