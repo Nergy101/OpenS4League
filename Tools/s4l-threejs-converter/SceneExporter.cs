@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Numerics;
 using S4League.Scn;
 
-record SceneExport(object Scene, string[] DiffuseTextures, int Models, int Vertices, int Triangles);
+record SceneExport(object Scene, string[] DiffuseTextures, string[] SideTextures, int Models, int Vertices, int Triangles);
 
 // Single serialization path for maps, recipes, and lazy wardrobe scenes.
 static class SceneExporter
@@ -23,6 +23,9 @@ static class SceneExporter
         if (stream.Position != stream.Length) throw new InvalidDataException($"Parser did not consume {entry.FullName}: {stream.Position}/{stream.Length}");
         var nodes = new List<object>();
         var diffuseTextures = new List<string>();
+        // Side surfaces are baked lighting or normals, never diffuse colour: the texture kinds
+        // downstream (and the ESRGAN pass) depend on knowing which is which.
+        var sideTextures = new List<string>();
         var textureContext = Path.GetDirectoryName(entry.FullName[5..])!.Replace('\\', '/') + "/";
         foreach (var chunk in scene)
         {
@@ -48,6 +51,7 @@ static class SceneExporter
                     sourceMap = t.main_texture, sourceLightMap = t.side_texture
                 }).ToArray();
                 diffuseTextures.AddRange(groups.Where(g => g.map is not null).Select(g => g.map!));
+                sideTextures.AddRange(groups.Where(g => g.lightMap is not null).Select(g => g.lightMap!));
                 geometry = new { positions, normals, uv, uv1, tangents, indices = new { byteOffset = indexOffset, count = mesh.Faces.Count * 3, itemSize = 1, type = "Uint32Array" }, groups };
                 details = new { flags = (int)model.Shader, flagNames = model.Shader.ToString(), extraUV = model.TextureData.ExtraUV, animations = model.Animation, bones = model.WeightBone };
                 totalModels++; totalVertices += mesh.Vertices.Count; totalTriangles += mesh.Faces.Count;
@@ -60,7 +64,7 @@ static class SceneExporter
             nodes.Add(new { name = chunk.Name, parent = chunk.SubName, type = chunk.ChunkType.ToString(), matrix = Mat(chunk.Matrix), geometry, details });
         }
         var result = new { name = Path.GetFileName(entry.FullName), role, animationStorage = role == "skeleton" ? "source-only" : "inline", source = entry.FullName[5..].ToLowerInvariant(), header = scene.Header.Name, matrix = Mat(scene.Header.Matrix), nodes, sourceBytes = data.Length, consumedBytes = stream.Position };
-        return new(result, diffuseTextures.Distinct().ToArray(), totalModels, totalVertices, totalTriangles);
+        return new(result, diffuseTextures.Distinct().ToArray(), sideTextures.Distinct().ToArray(), totalModels, totalVertices, totalTriangles);
 
         object Attribute(IEnumerable<float> values, int itemSize)
         {

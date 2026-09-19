@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { MAP_INDEX_URL, mapAssetUrl, mapLabel, requestedMapId, resolveMapEntry } from '../src/MapRegistry.js';
+import { DEFAULT_MAP_ID, MAP_INDEX_URL, mapAssetUrl, mapLabel, requestedMapId, resolveMapEntry } from '../src/MapRegistry.js';
 
 const mapsRoot = new URL('../Models/Maps/', import.meta.url);
 const slug = text => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -37,10 +37,15 @@ test('every converted map directory is registered', async () => {
   assert.deepEqual(converted.filter(name => !ids.has(name)), [], 'Map was converted but is not in the index');
 });
 
-test('an id resolves case-insensitively and no id means the first map', async () => {
+test('an id resolves case-insensitively and no id means the default map Station-2', async () => {
   const index = await readIndex();
   const first = index.maps[0];
-  assert.equal(resolveMapEntry(index, ''), first);
+  const station = index.maps.find(map => map.id === DEFAULT_MAP_ID);
+  assert.ok(station, `${DEFAULT_MAP_ID} must be converted: the viewer opens it when no map is requested`);
+  assert.equal(resolveMapEntry(index, ''), station, 'The viewer must open Station-2 by default');
+  assert.equal(resolveMapEntry(index, station.id).id, station.id);
+  assert.equal(resolveMapEntry({ maps: [{ id: 'other-map' }] }, '').id, 'other-map',
+    'Without Station-2 the first converted map is still used');
   assert.equal(resolveMapEntry(index, first.id).id, first.id);
   assert.equal(resolveMapEntry(index, first.id.toUpperCase()).id, first.id);
   assert.equal(resolveMapEntry(index, first.directory).id, first.id);

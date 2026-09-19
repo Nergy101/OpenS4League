@@ -8,17 +8,20 @@ await mkdir(output, { recursive: true });
 const journal = new URL('browser-items.jsonl', output);
 if (!process.argv.includes('--resume')) await writeFile(journal, '');
 const previous = (await readFile(journal, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-const already = new Set(previous.filter(row => row.status === 'passed').map(row => `${row.item}/${row.variant}`));
+const already = new Set(previous.filter(row => row.status === 'passed').map(row => `${row.body ?? 'female'}/${row.item}/${row.variant}`));
 await withBrowser(base, 'window.characterReady === true', async ({ cdp, evaluate, delay, errors, failedRequests }) => {
   const initial = await evaluate(`(() => {
     const v = window.characterViewer;
     return { items: v.character.body.items.length, inventory: v.library.index.inventory.length,
+      converted: v.library.index.inventory.filter(i => i.status === 'converted').length,
       unavailable: v.library.index.inventory.filter(i => i.status === 'unavailable').length,
+      bodies: v.library.index.catalog.bodies.map(body => ({ id: body.id, items: body.items.length })),
       cachedScenes: v.library.sceneBuffers.size, cachedTextures: v.library.textures.size,
       allScenes: Object.keys(v.library.index.scenes).length, allTextures: Object.keys(v.library.index.textures).length };
   })()`);
   assert.ok(initial.items > 500);
-  assert.equal(initial.inventory, initial.items + initial.unavailable);
+  assert.deepEqual(initial.bodies.map(body => body.id), ['female', 'male']);
+  assert.equal(initial.inventory, initial.converted + initial.unavailable, 'Every inventory row is converted or has a reason');
   assert.ok(initial.cachedScenes < initial.allScenes / 10, 'Scenes loaded eagerly');
   assert.ok(initial.cachedTextures < initial.allTextures / 10, 'Textures loaded eagerly');
   await delay(300);
@@ -27,8 +30,8 @@ await withBrowser(base, 'window.characterReady === true', async ({ cdp, evaluate
     await writeFile(new URL(name + '.png', output), Buffer.from(image.data, 'base64'));
   };
   await capture('wardrobe');
-  const allJobs = await evaluate('window.characterViewer.character.body.items.flatMap(item => item.variants.map(variant => ({item:item.id,slot:item.slot,variant:variant.id})))');
-  let jobs = allJobs.filter(job => !already.has(`${job.item}/${job.variant}`));
+  const allJobs = await evaluate('window.characterViewer.assets.manifest.catalog.bodies.flatMap(body => body.items.flatMap(item => item.variants.map(variant => ({body:body.id,item:item.id,slot:item.slot,variant:variant.id}))))');
+  let jobs = allJobs.filter(job => !already.has(`${job.body}/${job.item}/${job.variant}`));
   if (process.env.WARDROBE_BROWSER_LIMIT) jobs = jobs.slice(0, Number(process.env.WARDROBE_BROWSER_LIMIT));
   // Low-resolution real WebGL rendering keeps exhaustive validation practical.
   // Every case is drawn and read back. Original-resolution screenshots follow.
@@ -36,7 +39,7 @@ await withBrowser(base, 'window.characterReady === true', async ({ cdp, evaluate
     const v = window.characterViewer;
     v.renderer.setAnimationLoop(null); v.renderer.setPixelRatio(1); v.renderer.setSize(480,480,false);
     v.renderer.shadowMap.enabled = false;
-    window.validationSlot = null;
+    window.validationBody = null; window.validationSlot = null;
   })()`);
   for (let start = 0; start < jobs.length; start += 8) {
     const batch = jobs.slice(start, start + 8);
@@ -44,7 +47,8 @@ await withBrowser(base, 'window.characterReady === true', async ({ cdp, evaluate
       const v = window.characterViewer; const rows = [];
       for (const job of ${JSON.stringify(batch)}) {
         try {
-          if (window.validationSlot !== job.slot) { await v.library.setBody('female'); window.validationSlot = job.slot; }
+          if (window.validationBody !== job.body) { await v.library.setBody(job.body); window.validationBody = job.body; window.validationSlot = null; }
+          if (window.validationSlot !== job.slot) { window.validationSlot = job.slot; }
           await v.library.equip(job.slot, job.item, job.variant);
           v.character.root.updateMatrixWorld(true);
           v.renderer.render(v.scene, v.camera);
@@ -99,7 +103,7 @@ await withBrowser(base, 'window.characterReady === true', async ({ cdp, evaluate
   })()`);
   await capture('saved-outfit');
   const rows = (await readFile(journal, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-  const latest = [...new Map(rows.map(row => [`${row.item}/${row.variant}`, row])).values()];
+  const latest = [...new Map(rows.map(row => [`${row.body ?? 'female'}/${row.item}/${row.variant}`, row])).values()];
   const report = { initial, expectedVariants: allJobs.length, checkedVariants: latest.length,
     complete: latest.length === allJobs.length,
     failures: latest.filter(row => row.status !== 'passed'),

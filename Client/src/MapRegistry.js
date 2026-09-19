@@ -14,11 +14,14 @@ export async function loadMapIndex(url = MAP_INDEX_URL) {
   return index;
 }
 
-/** Resolves a map id (or directory name, case-insensitively). No id means the first converted map. */
+/** The map the viewer opens when the URL requests none: Station-2, the preview's reference map. */
+export const DEFAULT_MAP_ID = 'station-2';
+
+/** Resolves a map id (or directory name, case-insensitively). No id means the default map. */
 export function resolveMapEntry(index, id) {
   const maps = index?.maps ?? [];
   if (!maps.length) throw new Error('No converted maps. Run: make threejs convert-assets');
-  if (!id) return maps[0];
+  if (!id) return maps.find(map => map.id.toLowerCase() === DEFAULT_MAP_ID) ?? maps[0];
   const wanted = id.toLowerCase();
   const entry = maps.find(map => map.id.toLowerCase() === wanted || map.directory?.toLowerCase() === wanted);
   if (!entry) throw new Error(`Unknown map '${id}'. Available: ${maps.map(map => map.id).join(', ')}`);

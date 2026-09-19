@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { loadScnAssets, scnGeometry, scnMaterials } from './ScnAssets.js';
 
 /** Loads a converted SCN map bundle; `bundleFormat` is the signature the map index declares. */
-export async function loadMap(manifestUrl, bundleFormat) {
-  const { manifest, buffer, textures } = await loadScnAssets(manifestUrl, bundleFormat);
-  return { ...buildMap(manifest, buffer, textures, bundleFormat), manifest };
+export async function loadMap(manifestUrl, bundleFormat, options = {}) {
+  const assets = await loadScnAssets(manifestUrl, bundleFormat, options);
+  const { manifest, buffer, textures, levels, urls, base, bufferUrl } = assets;
+  return { ...buildMap(manifest, buffer, textures, bundleFormat), manifest, levels, base, textures, urls,
+           manifestUrl: assets.manifestUrl, bufferUrl };
 }
 
 export function buildMap(manifest, buffer, textures, bundleFormat) {
@@ -14,6 +16,7 @@ export function buildMap(manifest, buffer, textures, bundleFormat) {
   root.name = manifest.name ?? 'map';
   root.scale.z = -1; // One explicit handedness conversion; original units unchanged.
   const helpers = [], skies = [];
+  const textured = []; // meshes whose materials name textures, for a quality switch to rebuild
 
   for (const source of manifest.scenes) {
     const group = new THREE.Group();
@@ -35,6 +38,7 @@ export function buildMap(manifest, buffer, textures, bundleFormat) {
           || /^oct_/i.test(data.name)
           || !g.groups.some(range => range.map);
         if (helper) { node.visible = false; helpers.push(node); }
+        if (g.groups.some(range => range.map || range.lightMap)) textured.push({ node, data });
         // Preview convention: show the allied sector variant. Ownership requires
         // game state; drawing its red and blue alternatives together makes purple.
         if (/sector\d+_enemy_/i.test(data.name)) node.visible = false;
@@ -109,5 +113,17 @@ export function buildMap(manifest, buffer, textures, bundleFormat) {
   }
   update(0);
   root.updateMatrixWorld(true);
-  return { root, helpers, skies, update };
+  // A quality switch rebuilds materials from the same source data — the geometry, transforms and
+  // every material flag stay as they are; only the texture level changes.
+  function rebuildMaterials(next) {
+    for (const { node, data } of textured) {
+      const previous = Array.isArray(node.material) ? node.material : [node.material];
+      node.material = scnMaterials(data, next);
+      for (const material of previous) {
+        for (const slot of ['map', 'lightMap', 'normalMap']) material[slot]?.dispose();
+        material.dispose();
+      }
+    }
+  }
+  return { root, helpers, skies, update, textured, rebuildMaterials };
 }

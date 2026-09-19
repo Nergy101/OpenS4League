@@ -15,6 +15,21 @@
     header a { pointer-events: auto; } .eyebrow { font-size: 10px; letter-spacing: .18em; color: #92a4ba; text-transform: uppercase; }
     #brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #c0cddc; text-decoration: none; font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; pointer-events: auto; }
     #brand:hover { color: #eef3fb; } #brand img { display: block; }
+    /* App-level navigation: the project's previews, like a normal site header. */
+    #main-nav { display: flex; align-items: center; gap: 8px 20px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #ffffff1a; }
+    #main-nav ul { display: flex; gap: 2px; margin: 0; padding: 0; list-style: none; }
+    #main-nav ul a { display: block; padding: 6px 11px; border-radius: 5px; color: #bac9db; text-decoration: none; font-size: 12px; }
+    #main-nav ul a:hover { color: #eef3fb; background: #ffffff12; }
+    #main-nav ul a[aria-current="page"] { color: #9fd0ff; background: #ffffff17; font-weight: 600; }
+    /* The stage header ignores pointer events so the canvas keeps drags; the nav and its menus do not. */
+    #main-nav, .page-menus, .page-menu, .page-menu select, #texture-quality-status { pointer-events: auto; }
+    /* Page-specific selection menus sit underneath the main navigation. */
+    .page-menus { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+    .page-menus + .page-menus { margin-top: 9px; }
+    .page-menu { display: inline-flex; align-items: center; gap: 7px; margin: 0; }
+    .page-menu .label { color: #92a4ba; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+    .page-menu select { width: auto; }
+    #texture-quality-status { margin: 8px 0 0; }
     h1 { font-size: 23px; font-weight: 550; margin: 6px 0 8px; letter-spacing: -.03em; }
     #status { max-width: 490px; line-height: 1.5; color: #a1b1c5; }
     #status.error { color: #ff9b94; }
@@ -34,6 +49,16 @@
     select { width: 100%; } select:disabled { color: #93a5bd; cursor: default; }
     button { cursor: pointer; } button:hover { background: #35485f; }
     .slot { border-top: 1px solid #ffffff0b; padding: 12px 0; } .slot:first-child { border-top: none; }
+    .equip-picker { position: relative; }
+    .equip-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; font-size: 12px; }
+    .equip-trigger::after { content: '▾'; color: #7f93ac; font-size: 10px; }
+    .equip-popup { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; background: #1c2534; border: 1px solid #ffffff22; border-radius: 6px; box-shadow: 0 12px 28px #00000073; overflow: hidden; }
+    .equip-preview { flex: none; height: 106px; display: flex; align-items: center; justify-content: center; background: #10151d; border-bottom: 1px solid #ffffff14; }
+    .equip-preview-canvas { width: 96px; height: 96px; display: block; }
+    .equip-options { list-style: none; margin: 0; padding: 4px; max-height: 220px; overflow-y: auto; }
+    .equip-options li { padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: #cdd8e6; }
+    .equip-options li.active, .equip-options li:hover { background: #2c3c52; }
+    .equip-options li[aria-selected="true"] { color: #9fd0ff; }
     .variant { display: grid; grid-template-columns: 45px 1fr; align-items: center; gap: 7px; margin-top: 7px; }
     .variant[hidden] { display: none; }
     .variant label { margin: 0; color: #6f859f; } .variant select { padding: 5px 8px; font-size: 11px; }
@@ -54,12 +79,32 @@
   <main>
     <section id="stage" aria-label="3D character preview">
       <header>
-        <a id="brand" href="/" title="OpenS4League — map viewer">
-          <img src="./logos/os4l-crest-flat-dark.svg" alt="OpenS4League" width="30" height="21">
-          <span>OpenS4League</span>
-        </a>
+        <nav id="main-nav" aria-label="OpenS4League previews">
+          <a id="brand" href="./index.html" title="OpenS4League — map viewer">
+            <img src="./logos/os4l-crest-flat-dark.svg" alt="OpenS4League" width="30" height="21">
+            <span>OpenS4League</span>
+          </a>
+          <ul>
+            <li><a href="./index.html">Maps</a></li>
+            <li><a href="./character.html" aria-current="page">Characters</a></li>
+          </ul>
+        </nav>
         <h1>Character Viewer</h1>
         <div id="status">Loading original character assets…</div>
+        <!-- Page-specific selections, as their own menus underneath the main navigation. -->
+        <div class="page-menus">
+          <label class="page-menu"><span class="label">Body</span><select id="body" disabled></select></label>
+          <label class="page-menu"><span class="label">Texture quality</span>
+            <select id="texture-quality" aria-label="Texture quality">
+              <option value="1x">Original (1×)</option>
+              <option value="4x">Enhanced (4×)</option>
+            </select>
+          </label>
+        </div>
+        <div class="page-menus">
+          <label class="page-menu"><span class="label">Lighting</span><select id="lighting" aria-label="Lighting environment"></select></label>
+        </div>
+        <p id="texture-quality-status" class="note">Requested: 1× · Loaded: 1×</p>
       </header>
       <div id="view-controls">
         <button id="front">Front</button><button id="side">Side</button><button id="back">Back</button><button id="frame">Frame character</button>
@@ -68,16 +113,6 @@
     </section>
     <aside>
       <h2>Character</h2>
-      <label for="body">Body type</label>
-      <select id="body" disabled></select>
-      <h3>Texture quality</h3>
-      <label for="texture-quality">Rendered texture variant</label>
-      <select id="texture-quality" aria-label="Texture quality">
-        <option value="1x">Original (1×)</option>
-        <option value="2x">Enhanced (2×)</option>
-        <option value="4x">Enhanced (4×)</option>
-      </select>
-      <p id="texture-quality-status" class="note">Requested: 1× · Loaded: 1×</p>
       <h3>Animation</h3>
       <label for="animation">Motion or emote</label>
       <select id="animation" disabled><option value="rest">T-pose (default)</option></select>

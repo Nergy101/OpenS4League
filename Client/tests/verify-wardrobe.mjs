@@ -1,4 +1,4 @@
-// Exhaustive CPU-side assembly and texture-file checks; real WebGL is checked separately.
+// Exhaustive CPU-side assembly and texture-file checks for every rig; real WebGL is checked separately.
 import { readFile, mkdir, writeFile, appendFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -20,50 +20,54 @@ const library = new WardrobeLibrary(index, base, {
   },
 });
 const model = await library.createModel();
-const items = model.body.items;
 let batch = [];
-for (const item of items) {
-  const variants = [];
-  for (const variant of item.variants) {
-    try {
-      await library.equip(item.slot, item.id, variant.id);
-      const selection = model.equipment.get(item.slot);
-      assert.equal(selection.item.id, item.id);
-      assert.equal(selection.variant.id, variant.id);
-      let meshes = 0;
-      for (const part of selection.parts) part.group.traverse(node => {
-        assert.ok(node.matrixWorld.elements.every(Number.isFinite), `Nonfinite transform: ${node.name}`);
-        if (!node.isMesh) return;
-        meshes++;
-        const position = node.geometry.attributes.position;
-        assert.ok(position.array.every(Number.isFinite), `Nonfinite vertices: ${node.name}`);
-        if (node.isSkinnedMesh) {
-          node.skeleton.update();
-          for (let v = 0; v < position.count; v++) {
-            const p = node.applyBoneTransform(v, new THREE.Vector3().fromBufferAttribute(position, v)).applyMatrix4(node.matrixWorld);
-            assert.ok(p.toArray().every(Number.isFinite), `Nonfinite skinning: ${node.name}/${v}`);
+for (const body of index.catalog.bodies) {
+  await library.setBody(body.id);
+  for (const item of body.items) {
+    const variants = [];
+    for (const variant of item.variants) {
+      try {
+        await library.equip(item.slot, item.id, variant.id);
+        const selection = model.equipment.get(item.slot);
+        assert.equal(selection.item.id, item.id);
+        assert.equal(selection.variant.id, variant.id);
+        let meshes = 0;
+        for (const part of selection.parts) part.group.traverse(node => {
+          assert.ok(node.matrixWorld.elements.every(Number.isFinite), `Nonfinite transform: ${node.name}`);
+          if (!node.isMesh) return;
+          meshes++;
+          const position = node.geometry.attributes.position;
+          assert.ok(position.array.every(Number.isFinite), `Nonfinite vertices: ${node.name}`);
+          if (node.isSkinnedMesh) {
+            node.skeleton.update();
+            for (let v = 0; v < position.count; v++) {
+              const p = node.applyBoneTransform(v, new THREE.Vector3().fromBufferAttribute(position, v)).applyMatrix4(node.matrixWorld);
+              assert.ok(p.toArray().every(Number.isFinite), `Nonfinite skinning: ${node.name}/${v}`);
+            }
           }
-        }
-        for (const material of node.material) if (material.map) assert.ok(library.textures.has(material.map.name), 'Material points at an unloaded texture');
-      });
-      assert.ok(meshes > 0, 'Item has no renderable meshes');
-      variants.push({ id: variant.id, status: 'passed', meshes });
-    } catch (error) {
-      variants.push({ id: variant.id, status: 'failed', error: error.message });
+          for (const material of node.material) if (material.map) assert.ok(library.textures.has(material.map.name), 'Material points at an unloaded texture');
+        });
+        assert.ok(meshes > 0, 'Item has no renderable meshes');
+        variants.push({ id: variant.id, status: 'passed', meshes });
+      } catch (error) {
+        variants.push({ id: variant.id, status: 'failed', error: error.message });
+      }
     }
-  }
-  batch.push({ id: item.id, slot: item.slot, variants, status: variants.every(v => v.status === 'passed') ? 'passed' : 'failed' });
-  if (batch.length >= 25) {
-    await appendFile(journal, batch.map(row => JSON.stringify(row)).join('\n') + '\n');
-    console.log(`Validated through ${item.id}`); batch = [];
+    batch.push({ body: body.id, id: item.id, slot: item.slot, variants, status: variants.every(v => v.status === 'passed') ? 'passed' : 'failed' });
+    if (batch.length >= 25) {
+      await appendFile(journal, batch.map(row => JSON.stringify(row)).join('\n') + '\n');
+      console.log(`Validated through ${body.id}/${item.id}`); batch = [];
+    }
   }
 }
 if (batch.length) await appendFile(journal, batch.map(row => JSON.stringify(row)).join('\n') + '\n');
 const rows = (await readFile(journal, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-assert.equal(rows.length, items.length);
-assert.equal(new Set(rows.map(row => row.id)).size, new Set(items.map(item => item.id)).size);
+const expected = index.catalog.bodies.reduce((n, body) => n + body.items.length, 0);
+assert.equal(rows.length, expected);
+assert.equal(new Set(rows.map(row => `${row.body}/${row.id}`)).size, expected);
 const summary = {
   items: rows.length, passed: rows.filter(row => row.status === 'passed').length,
+  bodies: Object.fromEntries(index.catalog.bodies.map(body => [body.id, body.items.length])),
   variants: rows.reduce((n, row) => n + row.variants.length, 0),
   failures: rows.filter(row => row.status !== 'passed'),
   residentScenes: library.sceneBuffers.size, residentTextures: library.textures.size,

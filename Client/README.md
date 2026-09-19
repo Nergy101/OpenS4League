@@ -8,12 +8,16 @@ game client and does not connect to the servers.
 
 ## Character viewer
 
-The female [character viewer](http://127.0.0.1:8132/character.html) has a searchable wardrobe
-of 604 converted items, lazy Original/2×/4× texture variants, local saved outfits, orbit controls,
-and the original rest-pose rig. All 646 source wearable IDs are accounted for; 42 incomplete
-entries have explicit unavailable reasons. The small basic viewer remains at `character.html?basic=1`.
+The [character viewer](http://127.0.0.1:8132/character.html) has a searchable wardrobe
+of 1,186 converted items for both shipped rigs (604 female, 601 male, 20 unisex shared), a Body
+type selector, lazy Original/4× texture variants, local saved outfits, orbit controls,
+and the original rest-pose rig. All 1,260 source wearable IDs are accounted for; 74 incomplete
+entries have explicit unavailable reasons. Both rigs have their own source-backed animation pack
+(30 clips each, from the client's own male and female libraries); a rig without a generated pack
+says so instead of playing another rig's tracks. The small basic female viewer
+remains at `character.html?basic=1`.
 See [CHARACTERS.md](CHARACTERS.md) for conversion commands, model files, and the catalog/API
-for future outfits, male rigs, and animation clips. Both previews use the same `npm start` server.
+for future outfits, rigs, and animation clips. Both previews use the same `npm start` server.
 
 ## Map viewer and flying controls
 
@@ -32,6 +36,14 @@ converted map in a scrollable panel with a search field (by name or id) and load
 pick; the list is the registry, so it stays in step with what has actually been converted. The
 server binds to loopback only. There are no CDN requests.
 
+- Texture quality selects `Original (1×)` or `Enhanced (4×)`: the level is resolved per texture, so
+  a map converted without generated levels simply has the 4× option disabled, and lightmaps and
+  normal maps keep their decoded original because generated pixels are never substituted for
+  semantic data. The choice is remembered as `opens4l.texture-quality.v1`.
+- A map can also be re-encoded as AVIF/WebP: `make threejs-map-encode MAP=station-2 FORMAT=avif`
+  writes colour/alpha `4×` levels as AVIF and registers the result as its own map entry
+  (`Station-2 4x AVIF`), so the two encodings can be compared by switching maps in the **Maps** menu.
+  The 1× originals and every lightmap/normal stay PNG.
 - Click the map or **Fly** to capture the mouse.
 - Mouse: look around. WASD: move; W/S follows the viewing direction.
 - Q/E: down/up. Shift: faster. Esc: release the mouse.

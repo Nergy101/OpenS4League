@@ -57,7 +57,15 @@ export class WardrobeLibrary {
   async loadTexture(path) {
     if (this.textures.has(path)) return this.textures.get(path);
     if (this.pendingTextures.has(path)) return this.pendingTextures.get(path);
-    const pending = this.textureStore.acquire(path, this.quality).then(result => {
+    const pending = this.textureStore.acquire(path, this.quality).then(async loaded => {
+      // A load that started before a quality change must not leave the old level resident:
+      // re-acquire the level the current request actually resolves to.
+      let result = loaded;
+      const expected = this.textureStore.resolve(path, this.quality);
+      if (expected.quality !== result.quality) {
+        this.textureStore.release(path, result.quality);
+        result = await this.textureStore.acquire(path, this.quality);
+      }
       this.textureEntries.set(path, result);
       this.textures.set(path, result.texture);
       return result.texture;
@@ -80,6 +88,32 @@ export class WardrobeLibrary {
       await this.loadTexture(path);
     }
     for (const [slot, selection] of this.model.equipment) this.model.setItem(slot, selection.item.id, selection.variant.id);
+    return this.reconcileQuality();
+  }
+
+  /**
+   * Re-acquire every resident texture whose loaded level is not the one the current quality
+   * resolves to, then rebind the equipment. A resident 1× texture while 4×/8× is requested means
+   * the level was loaded before the request (a reload, an on-demand load, or a slow switch);
+   * retrying is bounded so a genuinely unavailable higher level cannot loop forever.
+   */
+  async reconcileQuality(attempts = 2) {
+    if (!this.model) return this.textureStatus();
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const mismatched = [];
+      for (const [path, entry] of this.textureEntries) {
+        let expected;
+        try { expected = this.textureStore.resolve(path, this.quality); } catch { continue; }
+        if (expected.quality !== entry.quality) mismatched.push(path);
+      }
+      if (!mismatched.length) break;
+      for (const path of mismatched) {
+        this.textureStore.release(path, this.textureEntries.get(path)?.quality ?? this.quality);
+        this.textures.delete(path); this.textureEntries.delete(path);
+        await this.loadTexture(path);
+      }
+      for (const [slot, selection] of this.model.equipment) this.model.setItem(slot, selection.item.id, selection.variant.id);
+    }
     return this.textureStatus();
   }
 

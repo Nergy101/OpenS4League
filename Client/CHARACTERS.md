@@ -4,13 +4,17 @@ Open http://127.0.0.1:8132/character.html after running `npm start` in `Client/`
 Uses the same server, Three.js installation, PNG decoder, binary geometry format,
 material utilities, and browser-test harness as Station-2.
 
-## Full female wardrobe
+## Full wardrobe
 
-The default viewer loads the indexed wardrobe: **604 converted items**, **2,225 item/skin
-choices**, and **2,001 textures**, from 646 female/unisex wearable IDs in the local archive.
-The remaining 42 IDs are listed with explicit reasons: 20 have no renderable references,
-16 lack source scenes, five lack required textures, and one has an ambiguous texture.
-Male-only items, pet-category companions, and weapons are outside this wardrobe pass.
+The default viewer loads the indexed wardrobe for **both shipped rigs**: **1,186 converted
+items**, **4,331 item/skin choices**, and **3,830 textures**, from 1,260 wearable IDs in the
+local archive (626 female, 614 male, 20 unisex). The 74 remaining IDs are listed with explicit
+reasons: items without renderable references, with genuinely absent scenes, missing required
+textures, or ambiguous texture references. Pet-category companions and weapons are outside this
+wardrobe pass.
+
+Switch rigs with the Body type selector. The female body carries 604 items and the male body
+601; unisex accessories belong to both, and each rig keeps its own skeleton and client defaults.
 
 Search by item name or ID. Items and skins load on demand; unused source buffers and
 textures are released after changes. Startup needs only the current rig/outfit (seven
@@ -48,6 +52,20 @@ items in the supplied client's `xml/default_item.x7`, resolved through `xml/item
 | Gloves/hands | `1040001` | `hand/00_female_hand.scn` |
 | Shoes | `1050001` | `foot/00_female_foot.scn` |
 
+The male rig uses the same file's `<male>` group, resolved the same way:
+
+| Slot | Item ID | Source model |
+| --- | --- | --- |
+| Hair | `1000001` | `hair/01_male_hair.scn` |
+| Face | `1010003` | `face/00_male_face.scn` |
+| Shirt | `1020002` | `body/26_male_body.scn` |
+| Pants | `1030002` | `leg/26_male_leg.scn` |
+| Gloves/hands | `1040002` | `hand/00_male_hand.scn` |
+| Shoes | `1050002` | `foot/00_male_foot.scn` |
+
+Both rigs come from `resources/model/character/{female,male}_bip.scn` (82 bones for the female
+rig; the male rig is its own source skeleton).
+
 The source ZIP replaces several of these named files with meshes/textures named
 `48_female_*`. The conversion follows their actual contents instead of guessing from
 filenames. The English item labels are copied from the client, including its spelling.
@@ -80,15 +98,16 @@ three hair assets, including head rotation and actor transforms. With the viewer
 - Front, Side, Back, and Frame character reposition the inspection camera.
 - Equipment and Skin selectors are populated from the catalog.
 - Reset outfit restores the body's default items and the selected texture quality.
-- Texture quality selects `Original (1×)`, `Enhanced (2×)`, or `Enhanced (4×)` when generated variants exist. The preference is stored as `opens4l.texture-quality.v1`; saved outfits still contain IDs only.
+- Lighting selects one of five preview environments — Studio (the original rig), Daylight, Sunset, Night, and Showroom — changing the hemisphere/key/rim lights, the stage background and the floor shadow strength only; no asset data is touched. The choice is stored as `opens4l.lighting.v1`.
+- Texture quality selects `Original (1×)` or `Enhanced (4×)` when a generated variant exists; a missing level falls back to the highest one at or below the request. The preference is stored as `opens4l.texture-quality.v1`; saved outfits still contain IDs only.
 
 ### Texture quality and provenance
 
-The original decoded PNG is always the `1x` variant and remains the default. Optional `2x` and `4x` PNGs are generated offline with the converter's deterministic resampling profile; they are not source-authentic detail and do not alter geometry, UVs, skinning, animation data, or shader semantics. The index records each variant's `algorithm`, source and generated dimensions, and SHA-256 hashes. Runtime loading is lazy and falls back downward (4x → 2x → 1x), exposing requested versus loaded quality in the viewer.
+The original decoded PNG is always the `1x` variant and remains the default. The optional `4x` PNGs are generated offline — deterministically at first (Lanczos-style resampling), then upgraded for colour/alpha with Real-ESRGAN — and they are not source-authentic detail: they do not alter geometry, UVs, skinning, animation data, or shader semantics. The index records each variant's `algorithm`, source and generated dimensions, and SHA-256 hashes. Runtime loading is lazy and falls back downward (4x → 1x, or 2x in a bundle that still records it), exposing requested versus loaded quality in the viewer.
 
 Color and alpha maps retain sRGB semantics. Normal maps are tagged `normal` and use `NoColorSpace`; lightmaps remain separate and use clamp wrapping and UV1. They must not be processed as color data. A 4× texture has roughly 16× the uncompressed pixel memory of 1×, so a device texture-size limit can trigger fallback.
 
-To generate variants, use `--texture-quality 1x,2x,4x --upscale-algorithm deterministic-bilinear`. Generated files and manifests remain in ignored local asset directories; the source archive and existing 1× assets are never overwritten.
+To generate variants, use `--texture-quality 1x,4x --upscale-algorithm deterministic-bilinear`. Generated files and manifests remain in ignored local asset directories; the source archive and existing 1× assets are never overwritten. A variant that another pass generated (the `realesrgan-…` upscaling) is preserved with its file and provenance when the wardrobe is converted again, and a level that is already on disk is reused rather than re-encoded, so `make threejs-asset-upscale` resumes instead of starting over. That target upgrades the colour and alpha levels with the **Real-ESRGAN x4plus** model applied to the decoded source, and records that model as the level's `algorithm`. Only `1x` and `4x` exist: an `8x` level was generated once and looked worse than the 4× one, so it is no longer produced, and `2x` was dropped as an in-between level. `scripts/prune-texture-levels.py <bundle> --levels 8x` removes a level's files and index entries together from a bundle converted before that.
 
 The viewer cannot claim improved original fidelity: upscaling enlarges texture pixels only and cannot recover geometry or original-engine detail.
 - Optional skeleton, wireframe, and automatic rotation views.
@@ -129,10 +148,11 @@ dotnet run -c Release --project Tools/s4l-threejs-converter -- \
 
 node Client/tests/verify-wardrobe.mjs
 node Client/tests/wardrobe-browser-smoke.mjs
+node Client/tests/character-bodies-browser-smoke.mjs
 ```
 
-The CPU verifier assembles every converted item/skin choice. The browser verifier draws
-and reads back every choice in WebGL, exercises search, extended skinning with shadows,
+The CPU verifier assembles every converted item/skin choice of both rigs. The browser verifier
+draws and reads back every choice in WebGL, exercises search, extended skinning with shadows,
 and saved-outfit persistence. Both append per-item journals and aggregate the saved records.
 Browser verification can resume after interruption with `--resume`; a partial run is marked
 `complete: false` and must not be reported as exhaustive validation.
@@ -206,10 +226,20 @@ claims; more elaborate engine-specific splitting rules still need validation.
 
 ### Male characters
 
-Add another body record with its own skeleton, compatible item IDs, and defaults.
-The viewer's body selector and assembly code already consume these records. A real male
-asset import and visual validation are still required; no male assets are bundled now.
-Each body's item definitions are checked against its `sourceSex` during conversion.
+Both shipped rigs are converted: the index carries a `female` and a `male` body, each with its
+own skeleton, its defaults from `xml/default_item.x7`, and the items its `sourceSex` permits
+(unisex items are shared). The viewer's Body type selector switches between them, and each body's
+item definitions are checked against its `sourceSex` during conversion. Convert a single rig with
+`--rig female` or `--rig male` when a full pass is not needed.
+
+The male rig has its own animation pack. `Models/Characters/Animations/Male/` is converted from
+that rig's own libraries (`male_bip.scn`, `bip_male/male_bip_0000.scn`) with the male preview
+default `00074` and the shared unarmed `RunState_WeaponUnused` locomotion, so all 30 clips
+(same 28 social actions and two movement states as the female pack) are source-backed and bound to
+the 81-bone male rig. Each catalog body names its pack; a rig whose pack was not generated reports
+that instead of playing another rig's tracks. See `ANIMATIONS.md` for the conversion commands. The
+lightweight `?basic=1` fixture is still the female reference bundle
+(`Models/Characters/BasicFemale/`).
 
 ### Selectable animations
 
@@ -219,12 +249,13 @@ those entries in its selector. Bone transforms, attachments, and per-mesh invers
 remain available to these clips. Tests exercise playback and exact rest-pose restoration
 with a test clip; that fixture is not presented as a converted game animation.
 
-The original full rig animation library is preserved in the source SCN, with name/duration
-metadata in the bundle, but its key payloads are not yet converted into playable clips.
-A future importer must choose the correct library from the game's animation configuration
-and translate its local tracks to the assembled rig. `female_bip.scn` and
-`bip_female/female_bip_0000.scn` have different animation libraries despite similar bind rigs;
-do not substitute one based only on file size.
+The original rig animation libraries are converted per rig by the `--animations` mode, which
+chooses the correct library from the game's own bytecode and XML configuration and translates its
+local tracks to that rig's assembled bones (see `Tools/s4l-threejs-converter/ANIMATIONS.md`).
+`female_bip.scn` and `bip_female/female_bip_0000.scn` are different animation libraries despite
+similar bind rigs, exactly as `male_bip.scn` and `bip_male/male_bip_0000.scn` are: a clip present
+in only one library is exported from that exact source, and a clip missing from a rig's own
+libraries is reported in `unavailable` instead of being substituted from the other rig.
 
 ## Binding correctness and limitations
 

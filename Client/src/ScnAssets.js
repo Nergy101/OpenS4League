@@ -1,7 +1,36 @@
 import * as THREE from 'three';
+import { selectTextureVariant } from './TextureVariantStore.js';
+
+/** Resolve one level per indexed texture and load the files, reporting what each one resolved to.
+ *
+ * The selected level is the highest variant at or below the request that the device can hold:
+ * downgrading is explicit (`levels` reports it), and a texture with no generated variant — a
+ * lightmap or normal map, for instance — simply keeps its decoded original.
+ */
+export async function loadTextureSet(manifest, base, requested = '1x', options = {}) {
+  const loader = options.loader ?? new THREE.TextureLoader();
+  const maxTextureSize = options.maxTextureSize ?? Infinity;
+  const textures = new Map();
+  const levels = new Map();
+  const urls = new Map();
+  await Promise.all(Object.entries(manifest.textures ?? {}).map(async ([path, descriptor]) => {
+    // A bundle converted before variants existed describes the original level directly.
+    const chosen = selectTextureVariant({ ...descriptor, source: path }, requested, maxTextureSize);
+    const url = new URL(chosen.file, base).href;
+    const texture = await loader.loadAsync(url);
+    // The parser already flips V. Decoder rows are unchanged and upload flipY=true.
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.name = path;
+    textures.set(path, texture);
+    levels.set(path, chosen.quality);
+    urls.set(path, url);
+  }));
+  return { textures, levels, urls };
+}
 
 /** Shared transport/geometry/material layer for SCN-derived maps and characters. */
-export async function loadScnAssets(url, expectedFormat) {
+export async function loadScnAssets(url, expectedFormat, options = {}) {
   const base = new URL(url, window.location.href);
   const response = await fetch(base);
   if (!response.ok) throw new Error(`Asset manifest: HTTP ${response.status}. Run the converter first.`);
@@ -10,17 +39,10 @@ export async function loadScnAssets(url, expectedFormat) {
   const binary = await fetch(new URL(manifest.buffer, base));
   if (!binary.ok) throw new Error(`Geometry: HTTP ${binary.status}`);
   const buffer = await binary.arrayBuffer();
-  const textures = new Map();
-  const loader = new THREE.TextureLoader();
-  await Promise.all(Object.entries(manifest.textures).map(async ([path, info]) => {
-    const texture = await loader.loadAsync(new URL(info.file, base).href);
-    // The parser already flips V. Decoder rows are unchanged and upload flipY=true.
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.name = path;
-    textures.set(path, texture);
-  }));
-  return { manifest, buffer, textures, base };
+  const requested = options.quality ?? '1x';
+  const { textures, levels, urls } = await loadTextureSet(manifest, base, requested, options);
+  return { manifest, buffer, textures, levels, urls, base, requested,
+           manifestUrl: base.href, bufferUrl: new URL(manifest.buffer, base).href };
 }
 
 export function scnGeometry(data, buffer) {

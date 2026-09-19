@@ -14,8 +14,20 @@
     button, select { font: inherit; color: inherit; background: #253548; border: 1px solid #ffffff30; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
     button:hover { background: #374d66; } label { display: inline-flex; align-items: center; gap: 4px; }
     .menu { position: relative; }
-    #brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #c0cddc; text-decoration: none; font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; }
+    #brand { display: inline-flex; align-items: center; gap: 8px; color: #c0cddc; text-decoration: none; font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; }
     #brand:hover { color: #eef3fb; } #brand img { display: block; }
+    /* App-level navigation: the project's previews, like a normal site header. */
+    #main-nav { display: flex; align-items: center; gap: 8px 20px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #ffffff1a; }
+    #main-nav ul { display: flex; gap: 2px; margin: 0; padding: 0; list-style: none; }
+    #main-nav ul a { display: block; padding: 6px 11px; border-radius: 5px; color: #bac9db; text-decoration: none; font-size: 12px; }
+    #main-nav ul a:hover { color: #eef3fb; background: #ffffff12; }
+    #main-nav ul a[aria-current="page"] { color: #9fd0ff; background: #ffffff17; font-weight: 600; }
+    /* Page-specific selection menus sit underneath the main navigation. */
+    .page-menus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .page-menus .label { color: #92a4ba; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+    .page-menu { display: inline-flex; align-items: center; gap: 7px; margin: 0; }
+    .page-menu select { width: auto; }
+    #texture-quality-status { margin: 6px 0 0; color: #92a4ba; font-size: 11px; }
     #map-list { display: none; position: absolute; top: calc(100% + 6px); left: 0; width: 250px; flex-direction: column; padding: 6px; border: 1px solid #ffffff30; border-radius: 6px; background: #16202eef; box-shadow: 0 10px 26px #00000070; }
     #map-list.open { display: flex; }
     #map-search { flex: 0 0 auto; font: inherit; color: inherit; background: #101923; border: 1px solid #ffffff30; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; }
@@ -32,13 +44,29 @@
 </head>
 <body>
   <header>
-    <a id="brand" href="./index.html" title="OpenS4League — map viewer">
-      <img src="./logos/os4l-crest-flat-dark.svg" alt="OpenS4League" width="28" height="20">
-      <span>OpenS4League</span>
-    </a>
+    <nav id="main-nav" aria-label="OpenS4League previews">
+      <a id="brand" href="./index.html" title="OpenS4League — map viewer">
+        <img src="./logos/os4l-crest-flat-dark.svg" alt="OpenS4League" width="28" height="20">
+        <span>OpenS4League</span>
+      </a>
+      <ul>
+        <li><a href="./index.html" aria-current="page">Maps</a></li>
+        <li><a href="./character.html">Characters</a></li>
+      </ul>
+    </nav>
     <h1><span id="map-name"></span> <span style="color:#97abc2;font-weight:400">/ Three.js</span></h1>
+    <div class="page-menus">
+      <label class="page-menu"><span class="label">Texture quality</span>
+        <select id="texture-quality" aria-label="Texture quality">
+          <option value="1x">Original (1×)</option>
+          <option value="4x">Enhanced (4×)</option>
+        </select>
+      </label>
+    </div>
+    <p id="texture-quality-status" class="note">Requested: 1× · Loaded: 1×</p>
     <p id="status">Loading original map…</p>
     <div class="controls">
+      <span class="label">Map</span>
       <div class="menu">
         <button id="maps" aria-haspopup="true" aria-expanded="false">Maps ▾</button>
         <div id="map-list" role="group" aria-label="Converted maps">

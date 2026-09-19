@@ -35,21 +35,31 @@ class BundleTests(unittest.TestCase):
         data = json.loads((BUNDLE / 'station2.json').read_text())
         self.assertTrue('textures' in data, 'Browser-readable texture conversion is missing')
         self.assertEqual(set(data['textures']), set(data['texturePaths']))
+        # Every texture carries the variant contract: 1x is the decoded original, 4x the generated
+        # level, and the recorded kind says which of them may be generated at all.
+        self.assertEqual(data['coverage']['textureQuality']['requested'], ['1x', '4x'])
         for key, texture in data['textures'].items():
-            raw = (BUNDLE / texture['file']).read_bytes()
-            self.assertEqual(raw[:8], b'\x89PNG\r\n\x1a\n', key)
-            cursor = 8
-            compressed = bytearray()
-            while cursor < len(raw):
-                size = struct.unpack_from('>I', raw, cursor)[0]
-                chunk = raw[cursor + 4:cursor + 8 + size]
-                crc = struct.unpack_from('>I', raw, cursor + 8 + size)[0]
-                self.assertEqual(zlib.crc32(chunk), crc, key)
-                if chunk[:4] == b'IHDR':
-                    self.assertEqual(struct.unpack_from('>II', chunk, 4), (texture['width'], texture['height']))
-                if chunk[:4] == b'IDAT': compressed.extend(chunk[4:])
-                cursor += size + 12
-            self.assertEqual(len(zlib.decompress(compressed)), texture['height'] * (1 + texture['width'] * 4))
+            self.assertIn(texture['kind'], {'color', 'normal', 'lightmap', 'alpha'}, key)
+            self.assertEqual(sorted(texture['variants']), ['1x', '4x'], key)
+            for level, variant in texture['variants'].items():
+                raw = (BUNDLE / variant['file']).read_bytes()
+                self.assertEqual(raw[:8], b'\x89PNG\r\n\x1a\n', f'{key} {level}')
+                cursor = 8
+                compressed = bytearray()
+                while cursor < len(raw):
+                    size = struct.unpack_from('>I', raw, cursor)[0]
+                    chunk = raw[cursor + 4:cursor + 8 + size]
+                    crc = struct.unpack_from('>I', raw, cursor + 8 + size)[0]
+                    self.assertEqual(zlib.crc32(chunk), crc, f'{key} {level}')
+                    if chunk[:4] == b'IHDR':
+                        self.assertEqual(struct.unpack_from('>II', chunk, 4), (variant['width'], variant['height']))
+                    if chunk[:4] == b'IDAT': compressed.extend(chunk[4:])
+                    cursor += size + 12
+                self.assertEqual(len(zlib.decompress(compressed)), variant['height'] * (1 + variant['width'] * 4))
+            self.assertEqual(texture['variants']['4x']['width'], texture['variants']['1x']['width'] * 4, key)
+            # A generative model must never have produced a lightmap or a normal map.
+            if texture['kind'] in ('lightmap', 'normal'):
+                self.assertEqual(texture['variants']['4x']['algorithm'], 'deterministic-bilinear', key)
 
     def test_map_is_registered_in_the_viewer_index(self):
         index = json.loads((ROOT / 'Client/Models/Maps/index.json').read_text())

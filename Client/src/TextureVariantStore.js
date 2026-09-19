@@ -1,7 +1,15 @@
 import * as THREE from 'three';
 
+// The variant ladder: 1x is the decoded original, 4x the Real-ESRGAN-enhanced level. 2x is only a
+// legacy intermediate that older bundles may still carry — nothing generates it any more, and 8x
+// was dropped outright (it looked worse than 4x). The viewer offers 1x and 4x; a request still
+// degrades downward through whatever the bundle actually has.
 const QUALITIES = ['1x', '2x', '4x'];
-const rank = quality => Math.max(0, QUALITIES.indexOf(quality));
+const rank = quality => {
+  const index = QUALITIES.indexOf(quality);
+  if (index < 0) throw new Error(`Unknown texture quality '${quality}'; this build has ${QUALITIES.join(', ')}`);
+  return index;
+};
 
 /** Return the highest available variant no larger than the requested quality. */
 export function selectTextureVariant(descriptor, requested = '1x', maxTextureSize = Infinity) {

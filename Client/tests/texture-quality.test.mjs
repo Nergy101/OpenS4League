@@ -3,14 +3,41 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { TextureVariantStore, selectTextureVariant } from '../src/TextureVariantStore.js';
 
-test('selects requested variant and falls back downward', () => {
+test('selects the requested level and degrades downward through what the bundle has', () => {
+  const descriptor = { source: 'hair.dds', kind: 'color', variants: {
+    '1x': { file: 'textures/source.png', width: 128, height: 128 },
+    '4x': { file: 'textures/4x.png', width: 512, height: 512 },
+  } };
+  assert.equal(selectTextureVariant(descriptor, '4x').width, 512);
+  assert.equal(selectTextureVariant(descriptor, '1x').width, 128);
+});
+
+test('a bundle that still carries a legacy 2x serves it between 4x and 1x', () => {
   const descriptor = { source: 'hair.dds', kind: 'color', variants: {
     '1x': { file: 'textures/source.png', width: 128, height: 128 },
     '2x': { file: 'textures/2x.png', width: 256, height: 256 },
     '4x': { file: 'textures/4x.png', width: 512, height: 512 },
   } };
-  assert.equal(selectTextureVariant(descriptor, '2x').width, 256);
-  assert.equal(selectTextureVariant(descriptor, '8x').width, 128);
+  assert.equal(selectTextureVariant(descriptor, '4x').width, 512);
+  assert.equal(selectTextureVariant({ ...descriptor, variants: { '1x': descriptor.variants['1x'], '2x': descriptor.variants['2x'] } }, '4x').width, 256,
+    'Never silently drop back to the original when a generated level exists');
+});
+
+test('a missing 4x degrades to 1x and respects the GPU limit', () => {
+  const descriptor = { source: 'hair.dds', kind: 'color', variants: {
+    '1x': { file: 'textures/source.png', width: 128, height: 128 },
+    '4x': { file: 'textures/4x.png', width: 512, height: 512 },
+  } };
+  assert.equal(selectTextureVariant(descriptor, '4x').width, 512);
+  assert.equal(selectTextureVariant({ ...descriptor, variants: { '1x': descriptor.variants['1x'] } }, '4x').width, 128);
+  assert.equal(selectTextureVariant(descriptor, '4x', 300).width, 128, 'A 4x request over the GPU limit must degrade, not fail');
+});
+
+test('8x is not a level this build knows about', () => {
+  const descriptor = { source: 'hair.dds', kind: 'color', variants: {
+    '1x': { file: 'textures/source.png', width: 128, height: 128 },
+  } };
+  assert.throws(() => selectTextureVariant(descriptor, '8x'), /Unknown texture quality '8x'/);
 });
 
 test('shares pending loads and disposes only after release', async () => {
