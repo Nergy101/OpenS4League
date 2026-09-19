@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
+
+import hostapp
 
 ROOT = Path(__file__).resolve().parent.parent
 CLIENT = ROOT / "Client"
@@ -161,16 +163,19 @@ def list_viewers() -> None:
 
 
 def open_viewer(url: str) -> None:
-    npm = shutil.which("npm") or shutil.which("npm.cmd")
+    # npm is a .cmd shim on Windows, which CreateProcess cannot start directly: hostapp wraps it in
+    # `cmd /c` there and returns the plain path everywhere else.
+    npm = hostapp.command("npm")
     if npm is None:
         raise RuntimeError("npm is required to run the Three.js viewers")
 
     if not (CLIENT / "node_modules/three").exists():
         print("Installing Client dependencies...", flush=True)
-        subprocess.run([npm, "ci"], cwd=CLIENT, check=True)
+        subprocess.run([*npm, "ci"], cwd=CLIENT, check=True)
 
     if not port_is_open():
-        log_path = Path(os.environ.get("OPENS4L_THREEJS_LOG", "/tmp/opens4l-threejs.log"))
+        default_log = Path(tempfile.gettempdir()) / "opens4l-threejs.log"
+        log_path = Path(os.environ.get("OPENS4L_THREEJS_LOG", str(default_log)))
         log_file = log_path.open("ab")
         common_args = {
             "cwd": CLIENT,
@@ -179,15 +184,15 @@ def open_viewer(url: str) -> None:
             "stderr": subprocess.STDOUT,
         }
         if os.name == "posix":
-            subprocess.Popen([npm, "start"], start_new_session=True, **common_args)
+            subprocess.Popen([*npm, "start"], start_new_session=True, **common_args)
         elif sys.platform == "win32":
             subprocess.Popen(
-                [npm, "start"],
+                [*npm, "start"],
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
                 **common_args,
             )
         else:
-            subprocess.Popen([npm, "start"], **common_args)
+            subprocess.Popen([*npm, "start"], **common_args)
         log_file.close()
         for _ in range(30):
             if port_is_open():

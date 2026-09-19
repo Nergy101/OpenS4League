@@ -8,11 +8,17 @@ SERVERS = OpenS4L.Server.Auth OpenS4L.Server.Chat OpenS4L.Server.Game OpenS4L.Se
 
 .PHONY: help build server publish clean cleanup test coverage
 
+# The interpreter every recipe uses: candidates are executed directly (a missing one only complains
+# on stderr, which `$(shell ...)` ignores), so this needs no `command -v`/`where` and behaves the same
+# under cmd.exe and sh. Override with PYTHON=<interpreter>.
+PYTHON ?= $(shell python3 -c "import sys;print(sys.executable)" || py -c "import sys;print(sys.executable)" || python -c "import sys;print(sys.executable)")
+PYTHON_REQUIRED = $(if $(PYTHON),,\
+    $(error No Python 3 interpreter found (tried python3, py, python). Install one, or pass PYTHON=<interpreter>.))
+
 .DEFAULT_GOAL := help
 
 help: ## List targets
-	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@$(PYTHON_REQUIRED)$(PYTHON) ../scripts/make-help.py Makefile
 
 build: server ## Build the whole solution (Release)
 
@@ -27,15 +33,14 @@ coverage: ## Run the server unit tests with line-coverage collection (coverlet)
 	  --collect:"XPlat Code Coverage" --results-directory opens4l/tests/coverage-results
 
 publish: ## Publish all four servers to opens4l/dist/<short-name> (auth, chat, game, relay)
-	@for s in $(SERVERS); do \
-	  n=$$(echo $$s | sed 's/.*\.//' | tr '[:upper:]' '[:lower:]'); \
-	  echo "== publishing $$s -> opens4l/dist/$$n =="; \
-	  dotnet publish opens4l/src/$$s/$$s.csproj -c $(CONF) -o opens4l/dist/$$n; \
-	done
+	dotnet publish opens4l/src/OpenS4L.Server.Auth/OpenS4L.Server.Auth.csproj -c $(CONF) -o opens4l/dist/auth
+	dotnet publish opens4l/src/OpenS4L.Server.Chat/OpenS4L.Server.Chat.csproj -c $(CONF) -o opens4l/dist/chat
+	dotnet publish opens4l/src/OpenS4L.Server.Game/OpenS4L.Server.Game.csproj -c $(CONF) -o opens4l/dist/game
+	dotnet publish opens4l/src/OpenS4L.Server.Relay/OpenS4L.Server.Relay.csproj -c $(CONF) -o opens4l/dist/relay
 
 clean: ## Remove build output
 	dotnet clean $(SLN) -c $(CONF)
-	rm -rf opens4l/dist opens4l/src/*/bin opens4l/src/*/obj
+	@$(PYTHON_REQUIRED)$(PYTHON) ../scripts/remove.py opens4l/dist "opens4l/src/*/bin" "opens4l/src/*/obj"
 
 cleanup: ## Remove test coverage results + test artifacts (keeps build output)
-	rm -rf opens4l/tests/coverage-results opens4l/tests/OpenS4L.Server.Mapping.Tests/TestResults
+	@$(PYTHON_REQUIRED)$(PYTHON) ../scripts/remove.py opens4l/tests/coverage-results opens4l/tests/OpenS4L.Server.Mapping.Tests/TestResults

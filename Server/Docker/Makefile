@@ -18,9 +18,15 @@ COMPOSE = docker compose
 
 .DEFAULT_GOAL := help
 
+# The interpreter every recipe uses: candidates are executed directly (a missing one only complains
+# on stderr, which `$(shell ...)` ignores), so this needs no `command -v`/`where` and behaves the same
+# under cmd.exe and sh. Override with PYTHON=<interpreter>.
+PYTHON ?= $(shell python3 -c "import sys;print(sys.executable)" || py -c "import sys;print(sys.executable)" || python -c "import sys;print(sys.executable)")
+PYTHON_REQUIRED = $(if $(PYTHON),,\
+    $(error No Python 3 interpreter found (tried python3, py, python). Install one, or pass PYTHON=<interpreter>.))
+
 help: ## List targets
-	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-11s\033[0m %s\n", $$1, $$2}'
+	@$(PYTHON_REQUIRED)$(PYTHON) ../../scripts/make-help.py Makefile
 
 build: ## Build the whole server solution (servers + plugins) on .NET 10
 	$(MAKE) -C .. build
@@ -33,24 +39,7 @@ publish: ## Publish the 4 servers to ../opens4l/dist/<server> and stage plugins
 	$(MAKE) plugins
 
 plugins: ## Stage plugin DLLs (+ config .hjson, + deps) into per-server plugins/ folders
-	@mkdir -p plugins/auth plugins/chat plugins/game plugins/relay
-	@rm -rf plugins/auth/*.dll plugins/auth/*.hjson plugins/chat/*.dll plugins/chat/*.hjson plugins/game/*.dll plugins/game/*.hjson plugins/relay/*.dll plugins/relay/*.hjson
-	@# The bundled plugins all target the Game server (they reference OpenS4L.Server.Game).
-	@# ExamplePlugin is excluded: it's reference/demo code, not something to run alongside real
-	@# gameplay testing. Its ExamplePluginGameRule registers itself as the handler for Touchdown
-	@# mode and unconditionally cancels GameRuleStateMachine's ScheduleTrigger hook (demoing that
-	@# a plugin *can* take manual control of state timing) without ever implementing a manual
-	@# trigger to replace it - every Touchdown room then freezes forever at the post-loading
-	@# countdown ("preparing" never resolves). Load it only if you're deliberately testing the
-	@# plugin hook API itself.
-	@for d in ../opens4l/src/plugins/OpenS4L.Plugins.*; do \
-	  [ "$$(basename "$$d")" = "OpenS4L.Plugins.ExamplePlugin" ] && continue; \
-	  [ -d "$$d/bin/Release/net10.0" ] && cp "$$d"/bin/Release/net10.0/*.dll plugins/game/ 2>/dev/null; \
-	  [ -d "$$d/bin/Release/net10.0" ] && cp "$$d"/bin/Release/net10.0/*.hjson plugins/game/ 2>/dev/null; \
-	done
-	@# The WebApi plugin now hosts Kestrel via the Microsoft.AspNetCore.App shared framework
-	@# (the aspnet:10.0 base image already provides it), so no EmbedIO/Swan DLLs need staging.
-	@echo "staged plugins: game=$$(ls plugins/game/*.dll 2>/dev/null | wc -l) dll(s), auth/chat/relay empty"
+	@$(PYTHON_REQUIRED)$(PYTHON) ../../scripts/stage-plugins.py
 
 up: ## Bring up the stack (PostgreSQL + Redis + 4 servers). Run `make publish` first.
 	$(COMPOSE) up -d

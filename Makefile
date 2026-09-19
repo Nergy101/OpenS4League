@@ -1,7 +1,7 @@
 # OpenS4L — top-level build orchestration (Windows-first; portable dotnet commands).
 # Requires the .NET 10 SDK. On Windows use git-bash / MSYS `make`, or run the dotnet commands directly.
 
-.PHONY: help build tools admin bootstrap tool threejs server clean cleanup test coverage threejs-asset-upscale
+.PHONY: help build tools admin bootstrap tool threejs server clean cleanup test coverage threejs-asset-upscale threejs-asset-encode threejs-map-upscale threejs-map-encode threejs-avif-all
 
 THREEJS_GOALS := map-viewer character-viewer convert-assets
 # Map recipes are accepted as goals too, so `make threejs map-viewer station-2` and
@@ -13,11 +13,20 @@ THREEJS_ASSET_DIR ?= Client/Models/Characters/Wardrobe
 # Path to YOUR unpacked Season-8 client ZIP. Never defaulted and never committed:
 # pass THREEJS_SOURCE_ZIP=... or export S4_CLIENT_ZIP=...
 THREEJS_SOURCE_ZIP ?= $(S4_CLIENT_ZIP)
+# Real-ESRGAN's venv + pinned model weights live here; the target bootstraps them on first run.
 THREEJS_ESRGAN_DIR ?= .cache/opens4l-realesrgan
-THREEJS_PYTHON ?= $(shell for p in python3.13 python3.12 python3.11 python3.10 python3.9 /usr/bin/python3; do command -v $$p 2>/dev/null && break; done)
-THREEJS_ESRGAN_WEIGHTS := $(THREEJS_ESRGAN_DIR)/RealESRGAN_x4plus.pth
-THREEJS_ESRGAN_PYTHON := $(THREEJS_ESRGAN_DIR)/venv/bin/python
-THREEJS_ESRGAN_URL := https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
+# Where the upscale run mirrors its output; empty means the driver's own timestamped default
+# (<cache>/logs/upscale-<timestamp>.log).
+THREEJS_UPSCALE_LOG ?=
+# The interpreter every recipe uses. Each candidate is executed directly — the one that exists
+# answers on stdout, a missing one only complains on stderr, which `$(shell ...)` ignores — so this
+# needs neither `command -v` (sh-only) nor `where` (cmd-only) and behaves the same under cmd.exe and
+# sh. Override with PYTHON=<interpreter> (or the older THREEJS_PYTHON=<interpreter>).
+PYTHON ?= $(shell python3 -c "import sys;print(sys.executable)" || py -c "import sys;print(sys.executable)" || python -c "import sys;print(sys.executable)")
+THREEJS_PYTHON ?= $(PYTHON)
+# An empty PYTHON must fail one target with a readable line, not a shell "command not found".
+PYTHON_REQUIRED = $(if $(PYTHON),,\
+    $(error No Python 3 interpreter found (tried python3, py, python). Install one, or pass PYTHON=<interpreter>.))
 .PHONY: $(THREEJS_GOALS) $(THREEJS_MAP_GOALS)
 
 # Tool names are also phony goals so `make tool s4l-map-editor` works.
@@ -27,8 +36,7 @@ TOOL_GOALS := s4l-resource-tool s4l-character-viewer s4l-map-editor s4l-animatio
 .DEFAULT_GOAL := help
 
 help: ## List targets
-	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@$(PYTHON_REQUIRED)$(PYTHON) scripts/make-help.py Makefile
 
 build: tools server ## Build everything (tools + server)
 
@@ -49,30 +57,34 @@ admin: ## Build the server admin console web dashboard (needs pnpm)
 	cd Tools/s4l-admin-console/web && pnpm install && pnpm run build
 
 bootstrap: ## Start the server + admin dashboard and open the dashboard in a browser
-	@python3 scripts/bootstrap.py || py scripts/bootstrap.py || python scripts/bootstrap.py
+	@$(PYTHON_REQUIRED)$(PYTHON) scripts/bootstrap.py
 
 tool: ## List tools, or build and launch one: make tool <toolname>
-	@python3 scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))" || py scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))" || python scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))"
+	@$(PYTHON_REQUIRED)$(PYTHON) scripts/tool.py "$(if $(TOOL),$(TOOL),$(word 2,$(MAKECMDGOALS)))"
 
 $(TOOL_GOALS):
 	@:
 
 threejs: ## List the Three.js viewers/maps, or launch one: make threejs map-viewer [<map>]
-	@$(THREEJS_PYTHON) scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" "$(word 3,$(MAKECMDGOALS))"
+	@$(PYTHON_REQUIRED)$(PYTHON) scripts/threejs.py "$(word 2,$(MAKECMDGOALS))" "$(word 3,$(MAKECMDGOALS))"
 
 $(THREEJS_GOALS) $(THREEJS_MAP_GOALS):
 	@:
 
-threejs-asset-upscale: ## Generate wardrobe 1x/2x/4x assets with Real-ESRGAN (needs S4_CLIENT_ZIP/THREEJS_SOURCE_ZIP)
-	@test -n "$(THREEJS_SOURCE_ZIP)" || { echo "Set S4_CLIENT_ZIP=/path/to/your Season-8 client ZIP (user-supplied client data is never committed)." >&2; exit 1; }
-	@test -f "$(THREEJS_SOURCE_ZIP)" || { echo "Missing source archive: $(THREEJS_SOURCE_ZIP)" >&2; exit 1; }
-	@mkdir -p "$(THREEJS_ESRGAN_DIR)"
-	@if [ -x "$(THREEJS_ESRGAN_PYTHON)" ] && "$(THREEJS_ESRGAN_PYTHON)" --version 2>&1 | grep -q 'Python 3.14'; then mv "$(THREEJS_ESRGAN_DIR)/venv" "$(THREEJS_ESRGAN_DIR)/venv-incompatible-$$(date +%Y%m%d%H%M%S)"; rm -f "$(THREEJS_ESRGAN_DIR)/.installed"; fi
-	@if [ ! -x "$(THREEJS_ESRGAN_PYTHON)" ]; then "$(THREEJS_PYTHON)" -m venv "$(THREEJS_ESRGAN_DIR)/venv"; fi
-	@if [ ! -f "$(THREEJS_ESRGAN_DIR)/.installed" ]; then "$(THREEJS_ESRGAN_PYTHON)" -m pip install --upgrade pip 'realesrgan==0.3.0' && touch "$(THREEJS_ESRGAN_DIR)/.installed"; fi
-	@if [ ! -f "$(THREEJS_ESRGAN_WEIGHTS)" ]; then curl -L --fail --retry 3 -o "$(THREEJS_ESRGAN_WEIGHTS)" "$(THREEJS_ESRGAN_URL)"; fi
-	@if [ ! -f "$(THREEJS_ASSET_DIR)/index.json" ]; then dotnet run -c Release --project Tools/s4l-threejs-converter -- "$(THREEJS_SOURCE_ZIP)" "$(THREEJS_ASSET_DIR)" --wardrobe --texture-quality 1x,2x,4x; fi
-	"$(THREEJS_ESRGAN_PYTHON)" Tools/s4l-threejs-converter/scripts/generate-esrgan-textures.py --root "$(THREEJS_ASSET_DIR)" --weights "$(THREEJS_ESRGAN_WEIGHTS)"
+threejs-asset-upscale: ## Generate the wardrobe 1x/4x levels, then the Real-ESRGAN 4x color+alpha (needs S4_CLIENT_ZIP/THREEJS_SOURCE_ZIP)
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/upscale-assets.py --source "$(THREEJS_SOURCE_ZIP)" --assets "$(THREEJS_ASSET_DIR)" --cache "$(THREEJS_ESRGAN_DIR)" --python "$(PYTHON)" $(if $(THREEJS_UPSCALE_LOG),--log "$(THREEJS_UPSCALE_LOG)",)
+
+threejs-map-upscale: ## Generate one map's 1x/4x levels, then its Real-ESRGAN 4x color+alpha: make threejs-map-upscale MAP=station-2
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/upscale-assets.py --map "$(MAP)" --source "$(THREEJS_SOURCE_ZIP)" --cache "$(THREEJS_ESRGAN_DIR)" --python "$(PYTHON)" $(if $(THREEJS_UPSCALE_LOG),--log "$(THREEJS_UPSCALE_LOG)",)
+
+threejs-map-encode: ## Re-encode a map's generated level as AVIF/WebP: make threejs-map-encode MAP=station-2 [FORMAT=avif] [IN_PLACE=1]
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/encode-texture-levels.py --map "$(MAP)" --format "$(if $(FORMAT),$(FORMAT),avif)" $(if $(QUALITY),--quality "$(QUALITY)",) $(if $(KINDS),--kinds "$(KINDS)",) $(if $(IN_PLACE),--in-place,)
+
+threejs-asset-encode: ## Re-encode the wardrobe's 4x levels as AVIF/WebP in place: make threejs-asset-encode [FORMAT=avif] [KINDS=color,alpha,lightmap,normal]
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/encode-texture-levels.py "$(THREEJS_ASSET_DIR)" --manifest index.json --in-place --format "$(if $(FORMAT),$(FORMAT),avif)" --kinds "$(if $(KINDS),$(KINDS),color,alpha,lightmap,normal)"
+
+threejs-avif-all: ## Every asset to its final state (4x pass + AVIF in place, wardrobe + every map): make threejs-avif-all [ONLY=wardrobe|maps] [MAP=station-2] [DRY_RUN=1]
+	@$(PYTHON_REQUIRED)$(PYTHON) Tools/s4l-threejs-converter/scripts/avif-pass-all.py $(if $(THREEJS_SOURCE_ZIP),--source "$(THREEJS_SOURCE_ZIP)",) --format "$(if $(FORMAT),$(FORMAT),avif)" --python "$(PYTHON)" $(if $(filter wardrobe,$(ONLY)),--skip-maps,) $(if $(filter maps,$(ONLY)),--skip-wardrobe,) $(if $(MAP),--map "$(MAP)",) $(if $(LOG),--log "$(LOG)",) $(if $(REPORT),--report "$(REPORT)",) $(if $(DRY_RUN),--dry-run,)
 
 server: ## Build the .NET 10 server rebuild
 	$(MAKE) -C Server build
@@ -84,9 +96,9 @@ coverage: server ## Build + run the server unit tests with coverage collection
 	$(MAKE) -C Server coverage
 
 clean: ## Clean all build output
-	$(MAKE) -C Tools/s4l-resource-tool clean || true
-	$(MAKE) -C Server clean || true
+	$(MAKE) -C Tools/s4l-resource-tool clean || exit 0
+	$(MAKE) -C Server clean || exit 0
 
 cleanup: ## Remove test coverage results + test artifacts over all tools & servers (keeps build output)
-	$(MAKE) -C Tools/s4l-resource-tool clean || true
-	$(MAKE) -C Server cleanup || true
+	$(MAKE) -C Tools/s4l-resource-tool clean || exit 0
+	$(MAKE) -C Server cleanup || exit 0

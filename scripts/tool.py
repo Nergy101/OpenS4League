@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
+
+import hostapp
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "Tools"
@@ -44,16 +46,18 @@ def port_is_open(port: int) -> bool:
 
 def start_admin() -> None:
     admin_dir = TOOLS / "s4l-admin-console"
-    run(["pnpm", "install"], admin_dir / "web")
-    run(["pnpm", "run", "build"], admin_dir / "web")
+    pnpm = hostapp.command("pnpm") or ["pnpm"]
+    run([*pnpm, "install"], admin_dir / "web")
+    run([*pnpm, "run", "build"], admin_dir / "web")
     if not port_is_open(8020):
-        node = shutil.which("node")
+        node = hostapp.command("node")
         if node is None:
             raise RuntimeError("Node.js is required to run s4l-admin-console")
-        log_path = Path(os.environ.get("OPENS4L_ADMIN_LOG", "/tmp/opens4l-admin-console.log"))
+        default_log = Path(tempfile.gettempdir()) / "opens4l-admin-console.log"
+        log_path = Path(os.environ.get("OPENS4L_ADMIN_LOG", str(default_log)))
         log_file = log_path.open("ab")
         subprocess.Popen(
-            [node, str(admin_dir / "server/server.js")],
+            [*node, str(admin_dir / "server/server.js")],
             cwd=admin_dir,
             stdin=subprocess.DEVNULL,
             stdout=log_file,

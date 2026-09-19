@@ -10,6 +10,13 @@ RID ?= osx-arm64
 
 .DEFAULT_GOAL := help
 
+# The interpreter every recipe uses: candidates are executed directly (a missing one only complains
+# on stderr, which `$(shell ...)` ignores), so this needs no `command -v`/`where` and behaves the same
+# under cmd.exe and sh. Override with PYTHON=<interpreter>.
+PYTHON ?= $(shell python3 -c "import sys;print(sys.executable)" || py -c "import sys;print(sys.executable)" || python -c "import sys;print(sys.executable)")
+PYTHON_REQUIRED = $(if $(PYTHON),,\
+    $(error No Python 3 interpreter found (tried python3, py, python). Install one, or pass PYTHON=<interpreter>.))
+
 .PHONY: run
 run: ## Launch the GUI resource viewer/editor
 	dotnet run --project $(APP)
@@ -43,9 +50,9 @@ publish: ## Publish a self-contained app for RID (default osx-arm64; e.g. RID=wi
 
 .PHONY: clean
 clean: ## Remove build output
-	dotnet clean -c Release; rm -rf publish
+	dotnet clean -c Release
+	@$(PYTHON_REQUIRED)$(PYTHON) ../../scripts/remove.py publish
 
 .PHONY: help
 help: ## List targets
-	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+	@$(PYTHON_REQUIRED)$(PYTHON) ../../scripts/make-help.py Makefile

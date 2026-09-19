@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
+
+import hostapp
 
 ROOT = Path(__file__).resolve().parent.parent
 ADMIN_DIR = ROOT / "Tools" / "s4l-admin-console"
@@ -34,11 +36,12 @@ def start_admin() -> None:
         print(f"Admin dashboard already running at {ADMIN_URL}", flush=True)
         return
 
-    node = shutil.which("node")
+    node = hostapp.command("node")
     if node is None:
         raise RuntimeError("Node.js is required to run the admin dashboard")
 
-    log_path = Path(os.environ.get("OPENS4L_ADMIN_LOG", "/tmp/opens4l-admin-console.log"))
+    default_log = Path(tempfile.gettempdir()) / "opens4l-admin-console.log"
+    log_path = Path(os.environ.get("OPENS4L_ADMIN_LOG", str(default_log)))
     log_file = log_path.open("ab")
     common_args = {
         "cwd": ADMIN_DIR,
@@ -47,15 +50,15 @@ def start_admin() -> None:
         "stderr": subprocess.STDOUT,
     }
     if os.name == "posix":
-        subprocess.Popen([node, str(ADMIN_SERVER)], start_new_session=True, **common_args)
+        subprocess.Popen([*node, str(ADMIN_SERVER)], start_new_session=True, **common_args)
     elif sys.platform == "win32":
         subprocess.Popen(
-            [node, str(ADMIN_SERVER)],
+            [*node, str(ADMIN_SERVER)],
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
             **common_args,
         )
     else:
-        subprocess.Popen([node, str(ADMIN_SERVER)], **common_args)
+        subprocess.Popen([*node, str(ADMIN_SERVER)], **common_args)
     log_file.close()
 
     for _ in range(30):
