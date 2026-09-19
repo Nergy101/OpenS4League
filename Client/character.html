@@ -8,7 +8,7 @@
   <style>
     :root { color-scheme: dark; font: 13px system-ui, sans-serif; color: #dce5ef; background: #141922; }
     * { box-sizing: border-box; } body { margin: 0; } a { color: #a4bddb; text-decoration: none; } a:hover { color: white; }
-    main { display: grid; grid-template-columns: minmax(0, 1fr) 310px; height: 100dvh; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 460px; height: 100dvh; }
     #stage { position: relative; min-width: 0; background: radial-gradient(ellipse at 50% 45%, #364354 0%, #222b38 45%, #151b25 85%); }
     canvas { display: block; width: 100%; height: 100%; outline: none; }
     header { position: absolute; top: 26px; left: 28px; pointer-events: none; }
@@ -34,6 +34,10 @@
     #status { max-width: 490px; line-height: 1.5; color: #a1b1c5; }
     #status.error { color: #ff9b94; }
     #view-controls { position: absolute; bottom: 50px; left: 28px; display: flex; gap: 7px; flex-wrap: wrap; }
+    .part-opacity { position: absolute; z-index: 30; display: flex; align-items: center; gap: 8px; background: #1c2534; border: 1px solid #ffffff22; border-radius: 6px; padding: 8px 10px; box-shadow: 0 12px 28px #00000073; pointer-events: auto; }
+    .part-opacity-label { font-size: 11px; color: #cdd8e6; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .part-opacity input[type="range"] { width: 120px; }
+    .part-opacity button { padding: 2px 8px; line-height: 1; font-size: 13px; }
     footer { position: absolute; bottom: 22px; left: 28px; right: 18px; color: #899bb1; font-size: 11px; }
     aside { overflow-y: auto; border-left: 1px solid #ffffff0d; background: #171e29; padding: 28px 24px; }
     h2 { margin: 0 0 18px; font-size: 16px; font-weight: 550; } h3 { margin: 28px 0 14px; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: #92a4ba; }
@@ -49,16 +53,20 @@
     select { width: 100%; } select:disabled { color: #93a5bd; cursor: default; }
     button { cursor: pointer; } button:hover { background: #35485f; }
     .slot { border-top: 1px solid #ffffff0b; padding: 12px 0; } .slot:first-child { border-top: none; }
-    .equip-picker { position: relative; }
-    .equip-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; font-size: 12px; }
-    .equip-trigger::after { content: '▾'; color: #7f93ac; font-size: 10px; }
-    .equip-popup { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; background: #1c2534; border: 1px solid #ffffff22; border-radius: 6px; box-shadow: 0 12px 28px #00000073; overflow: hidden; }
-    .equip-preview { flex: none; height: 106px; display: flex; align-items: center; justify-content: center; background: #10151d; border-bottom: 1px solid #ffffff14; }
-    .equip-preview-canvas { width: 96px; height: 96px; display: block; }
-    .equip-options { list-style: none; margin: 0; padding: 4px; max-height: 220px; overflow-y: auto; }
-    .equip-options li { padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: #cdd8e6; }
-    .equip-options li.active, .equip-options li:hover { background: #2c3c52; }
-    .equip-options li[aria-selected="true"] { color: #9fd0ff; }
+    .equip-accordion { border: 1px solid #ffffff18; border-radius: 6px; overflow: hidden; }
+    .equip-accordion-header { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; font-size: 12px; border-radius: 0; }
+    .equip-accordion-header::after { content: '▾'; color: #7f93ac; font-size: 10px; flex: none; }
+    .equip-accordion-header[aria-expanded="true"]::after { content: '▴'; }
+    .equip-accordion-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .equip-accordion-body { border-top: 1px solid #ffffff18; background: #141b26; }
+    .equip-grid-scroll { max-height: 380px; overflow-y: auto; padding: 8px; }
+    .equip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+    .equip-cell { cursor: pointer; border: 1px solid transparent; border-radius: 6px; padding: 4px; text-align: center; }
+    .equip-cell:hover, .equip-cell:focus-visible { background: #2c3c5280; outline: none; }
+    .equip-cell.selected { border-color: #9fd0ff99; background: #2c3c5280; }
+    .equip-cell-viewport { width: 100%; aspect-ratio: 1; background: #0d1219; border-radius: 4px; }
+    .equip-cell-label { margin-top: 4px; font-size: 10px; line-height: 1.25; color: #cdd8e6; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .equip-grid-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 15; }
     .variant { display: grid; grid-template-columns: 45px 1fr; align-items: center; gap: 7px; margin-top: 7px; }
     .variant[hidden] { display: none; }
     .variant label { margin: 0; color: #6f859f; } .variant select { padding: 5px 8px; font-size: 11px; }
@@ -94,6 +102,8 @@
         <!-- Page-specific selections, as their own menus underneath the main navigation. -->
         <div class="page-menus">
           <label class="page-menu"><span class="label">Body</span><select id="body" disabled></select></label>
+        </div>
+        <div class="page-menus">
           <label class="page-menu"><span class="label">Texture quality</span>
             <select id="texture-quality" aria-label="Texture quality">
               <option value="1x">Original (1×)</option>
@@ -109,7 +119,12 @@
       <div id="view-controls">
         <button id="front">Front</button><button id="side">Side</button><button id="back">Back</button><button id="frame">Frame character</button>
       </div>
-      <footer>Drag to orbit · scroll to zoom · right-drag to pan</footer>
+      <div id="part-opacity" class="part-opacity" hidden>
+        <span id="part-opacity-label" class="part-opacity-label"></span>
+        <input id="part-opacity-slider" type="range" min="0" max="1" step="0.01">
+        <button id="part-opacity-close" type="button" aria-label="Close">×</button>
+      </div>
+      <footer>Drag to orbit · scroll to zoom · right-drag to pan · click a translucent part for its own opacity slider</footer>
     </section>
     <aside>
       <h2>Character</h2>

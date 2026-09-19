@@ -211,143 +211,292 @@ try {
       ? `${character.body.items.length} imported items · ${unavailable.length} unavailable · ${library.textures.size} textures loaded`
       : 'Basic outfit only · open the full wardrobe for more equipment';
   }
-  // Equipment picker: a custom listbox replaces the plain <select> so the option list can show a
-  // live, rotating render of whichever item is highlighted — a native <select>'s options are drawn
-  // by the OS and fire no hover events, so a per-option preview needs a DOM-rendered list. The
-  // original <select> stays in the DOM (hidden) as the actual source of truth: it keeps the exact
-  // same onchange wiring, and existing automation that sets `select.value` and dispatches `change`
-  // keeps working unchanged.
-  let previewCanvas, previewRenderer, previewCamera;
-  function getPreviewCanvas() {
-    if (!previewCanvas) {
-      previewCanvas = document.createElement('canvas');
-      previewCanvas.className = 'equip-preview-canvas';
-      previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true, alpha: true });
-      previewRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-      previewRenderer.setSize(96, 96, false);
-      previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
-      previewCamera = new THREE.PerspectiveCamera(32, 1, 1, 4000);
+  // Equipment section: each slot is an accordion (only one open at a time) whose body is a grid
+  // of every item, each cell a live render held at a slight 3/4 angle. A native <select>'s options are drawn by
+  // the OS and cannot host a render each, so the grid is plain DOM with one shared WebGL canvas
+  // overlaid on top of it (three.js's multi-viewport-in-one-canvas technique: a full-viewport
+  // canvas, one scissored/viewported render call per visible cell, each frame). The original
+  // <select> stays in the DOM (hidden) as the actual source of truth: it keeps the exact same
+  // onchange wiring, and existing automation that sets `select.value` and dispatches `change`
+  // keeps working unchanged. Cells lazily build their geometry/textures only while scrolled into
+  // view (IntersectionObserver) and dispose them on scrolling out, so opening a 100+ item slot
+  // does not eagerly load the whole slot at once.
+  let gridCanvas, gridRenderer, gridCamera;
+  function getGridRenderer() {
+    if (!gridRenderer) {
+      gridCanvas = document.createElement('canvas'); gridCanvas.className = 'equip-grid-canvas';
+      document.body.append(gridCanvas);
+      gridRenderer = new THREE.WebGLRenderer({ canvas: gridCanvas, antialias: true, alpha: true });
+      gridRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      gridRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      gridCamera = new THREE.PerspectiveCamera(32, 1, 1, 4000);
+      const resize = () => gridRenderer.setSize(window.innerWidth, window.innerHeight, false);
+      window.addEventListener('resize', resize); resize();
     }
-    return previewCanvas;
+    return gridRenderer;
   }
-  let previewParts = null, previewCenter = null, previewDistance = 0, previewAngle = 0, previewRequest = 0;
-  function clearPreviewParts() {
-    if (!previewParts) return;
-    for (const part of previewParts) {
-      part.group.removeFromParent(); disposeScnObject(part.group);
-      part.extraGroups?.forEach(group => { group.removeFromParent(); disposeScnObject(group); });
+  // A slight 3/4 turn from the front, like a catalog product shot — not a full spin.
+  const GRID_ANGLE = Math.PI / 6;
+  let openSection = null;
+  /** The world-space box(es) a cell's built roots occupy, framed for a small 3/4-angle shot. */
+  function frameRoots(roots) {
+    const meshes = [];
+    let box = new THREE.Box3();
+    for (const root of roots) root.traverse(node => {
+      if (!node.isMesh) return;
+      if (node.isSkinnedMesh) node.computeBoundingBox();
+      meshes.push(node);
+      box.union(new THREE.Box3().setFromObject(node, true));
+    });
+    if (box.isEmpty()) return null;
+    // Frame by height, not the full bounding box: a T-pose shirt/gloves' sleeves span far wider
+    // than the garment itself, and fitting that span would shrink every torso item to a speck.
+    let size = box.getSize(new THREE.Vector3());
+    // A left/right pair (gloves, shoes, a symmetric accessory) is wider than it is tall for a
+    // different reason: it is two separate pieces either side of the body with empty air between
+    // them, and a camera aimed at their midpoint frames — and, worse, one hand's mesh is often
+    // authored as a single object spanning both hands, so this can't be caught by splitting
+    // per-mesh; it needs an actual per-vertex split. Framing just the larger half keeps a real
+    // piece of geometry on screen instead of the empty gap between the two.
+    if (size.x > Math.max(size.y, size.z) * 2) {
+      const midpointX = box.getCenter(new THREE.Vector3()).x;
+      const left = new THREE.Box3(), right = new THREE.Box3(), point = new THREE.Vector3();
+      for (const mesh of meshes) {
+        const count = mesh.geometry.attributes.position.count;
+        for (let i = 0; i < count; i++) {
+          mesh.getVertexPosition(i, point);
+          point.applyMatrix4(mesh.matrixWorld);
+          (point.x < midpointX ? left : right).expandByPoint(point);
+        }
+      }
+      const leftSpan = left.isEmpty() ? 0 : left.getSize(new THREE.Vector3()).length();
+      const rightSpan = right.isEmpty() ? 0 : right.getSize(new THREE.Vector3()).length();
+      const chosen = rightSpan >= leftSpan ? right : left;
+      if (!chosen.isEmpty()) { box = chosen; size = box.getSize(new THREE.Vector3()); }
     }
-    previewParts = null;
+    const center = box.getCenter(new THREE.Vector3());
+    const heightSpan = Math.max(size.y, size.z, 6);
+    const distance = heightSpan / (2 * Math.tan(THREE.MathUtils.degToRad(gridCamera.fov / 2))) * 1.3;
+    return { center, distance };
   }
-  function stopPreview() { previewRequest++; clearPreviewParts(); }
-  async function previewItem(slot, itemId) {
-    const request = ++previewRequest;
-    clearPreviewParts();
-    if (!itemId) return;
+  function unloadCell(cell) {
+    cell.generation = (cell.generation ?? 0) + 1;
+    if (cell.roots) for (const root of cell.roots) { root.removeFromParent(); disposeScnObject(root); }
+    cell.roots = null; cell.center = null; cell.distance = null; cell.built = false;
+  }
+  async function loadCell(cell) {
+    if (cell.built || cell.loading || !cell.itemId) return;
+    const generation = cell.generation ?? 0;
+    cell.loading = true;
     try {
-      const item = character.body.items.find(candidate => candidate.id === itemId && candidate.slot === slot);
+      const item = character.body.items.find(candidate => candidate.id === cell.itemId && candidate.slot === cell.slot);
       if (!item) return;
       const variant = item.variants.find(candidate => candidate.id === 'default') ?? item.variants[0];
-      if (library) await library.prepareItem(character.body, slot, itemId, variant.id);
-      if (request !== previewRequest) return;
+      if (library) await library.prepareItem(character.body, cell.slot, cell.itemId, variant.id);
+      if (generation !== (cell.generation ?? 0)) return;
       const parts = item.parts.map(part => character.buildPart(part, variant.maps, item));
       for (const part of parts) part.parent.add(part.group);
       const roots = parts.flatMap(part => [part.group, ...(part.extraGroups ?? [])]);
       for (const root of roots) root.visible = false;
       character.root.updateMatrixWorld(true);
-      const meshBoxes = [];
-      for (const root of roots) root.traverse(node => {
-        if (!node.isMesh) return;
-        if (node.isSkinnedMesh) node.computeBoundingBox();
-        meshBoxes.push(new THREE.Box3().setFromObject(node, true));
-      });
-      let box = meshBoxes.reduce((acc, meshBox) => acc.union(meshBox), new THREE.Box3());
-      if (box.isEmpty()) { for (const part of parts) { part.group.removeFromParent(); disposeScnObject(part.group); part.extraGroups?.forEach(group => { group.removeFromParent(); disposeScnObject(group); }); } return; }
-      // Frame by height, not the full bounding box: a T-pose shirt/gloves' sleeves span far wider
-      // than the garment itself, and fitting that span would shrink every torso item to a speck.
-      let size = box.getSize(new THREE.Vector3());
-      // A left/right pair (gloves, shoes, a symmetric accessory) is wider than it is tall for a
-      // different reason: it is two separate pieces either side of the body with empty air between
-      // them, and a camera aimed at their midpoint frames that gap instead of either piece. Framing
-      // just the larger of the two halves keeps a real piece of geometry on screen.
-      if (size.x > Math.max(size.y, size.z) * 2 && meshBoxes.length > 1) {
-        const midpointX = box.getCenter(new THREE.Vector3()).x;
-        const sides = [meshBoxes.filter(b => b.getCenter(new THREE.Vector3()).x < midpointX),
-          meshBoxes.filter(b => b.getCenter(new THREE.Vector3()).x >= midpointX)];
-        const largerSide = sides[0].reduce((sum, b) => sum + b.getSize(new THREE.Vector3()).length(), 0)
-          >= sides[1].reduce((sum, b) => sum + b.getSize(new THREE.Vector3()).length(), 0) ? sides[0] : sides[1];
-        if (largerSide.length) {
-          box = largerSide.reduce((acc, meshBox) => acc.union(meshBox), new THREE.Box3());
-          size = box.getSize(new THREE.Vector3());
-        }
-      }
-      previewCenter = box.getCenter(new THREE.Vector3());
-      const heightSpan = Math.max(size.y, size.z, 6);
-      previewDistance = heightSpan / (2 * Math.tan(THREE.MathUtils.degToRad(previewCamera.fov / 2))) * 1.3;
-      previewParts = parts;
-    } catch { /* asset unavailable for preview; leave it blank rather than fail the picker */ }
+      const framed = frameRoots(roots);
+      if (!framed) { for (const root of roots) { root.removeFromParent(); disposeScnObject(root); } return; }
+      cell.roots = roots; cell.center = framed.center; cell.distance = framed.distance; cell.built = true;
+    } catch { /* asset unavailable for preview; leave the cell blank rather than fail the grid */ }
+    finally { cell.loading = false; }
   }
-  let openPicker = null;
-  function closeOpenPicker() {
-    if (!openPicker) return;
-    openPicker.popup.remove();
-    openPicker.trigger.setAttribute('aria-expanded', 'false');
-    openPicker = null;
-    stopPreview();
+  function disposeSection(section) { for (const cell of section.cells) { cell.observer.disconnect(); unloadCell(cell); } }
+  function closeOpenSection() {
+    if (!openSection) return;
+    openSection.body.hidden = true;
+    openSection.header.setAttribute('aria-expanded', 'false');
+    disposeSection(openSection);
+    openSection = null;
   }
-  document.addEventListener('mousedown', event => {
-    if (openPicker && !openPicker.element.contains(event.target)) closeOpenPicker();
+  function openEquipmentSection(wrapper, header, body, slot, itemSelect) {
+    if (openSection?.body === body) { closeOpenSection(); return; }
+    closeOpenSection();
+    header.setAttribute('aria-expanded', 'true');
+    body.hidden = false;
+    body.replaceChildren();
+    const scroll = document.createElement('div'); scroll.className = 'equip-grid-scroll';
+    const grid = document.createElement('div'); grid.className = 'equip-grid';
+    scroll.append(grid); body.append(scroll);
+    const cells = [];
+    let selectedCellEl = null;
+    for (const option of itemSelect.options) {
+      const cellEl = document.createElement('div'); cellEl.className = 'equip-cell'; cellEl.tabIndex = 0;
+      if (option.value === itemSelect.value) { cellEl.classList.add('selected'); selectedCellEl = cellEl; }
+      const viewport = document.createElement('div'); viewport.className = 'equip-cell-viewport';
+      const labelEl = document.createElement('div'); labelEl.className = 'equip-cell-label'; labelEl.textContent = option.text;
+      cellEl.append(viewport, labelEl);
+      const commit = () => { itemSelect.value = option.value; itemSelect.dispatchEvent(new Event('change')); };
+      cellEl.onclick = commit;
+      cellEl.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); commit(); } };
+      grid.append(cellEl);
+      const cell = { slot, itemId: option.value, viewportEl: viewport, built: false, loading: false, roots: null, center: null, distance: null };
+      const observer = new IntersectionObserver(entries => {
+        for (const entry of entries) { if (entry.isIntersecting) loadCell(cell); else unloadCell(cell); }
+      }, { root: scroll, rootMargin: '150px 0px' });
+      observer.observe(cellEl);
+      cell.observer = observer;
+      cells.push(cell);
+    }
+    if (selectedCellEl) {
+      // Scroll only the grid's own scroll container, not the aside around it: scrollIntoView
+      // would happily drag the whole sidebar to chase the cell instead.
+      const scrollRect = scroll.getBoundingClientRect(), cellRect = selectedCellEl.getBoundingClientRect();
+      scroll.scrollTop += (cellRect.top - scrollRect.top) - (scroll.clientHeight / 2 - cellRect.height / 2);
+    }
+    openSection = { slot, header, body, cells };
+  }
+  function buildEquipmentSection(slot, itemSelect) {
+    const wrapper = document.createElement('div'); wrapper.className = 'equip-accordion';
+    const header = document.createElement('button'); header.type = 'button'; header.className = 'equip-accordion-header'; header.id = `slot-${slot}-trigger`;
+    header.setAttribute('aria-expanded', 'false');
+    const currentLabel = document.createElement('span'); currentLabel.className = 'equip-accordion-current';
+    currentLabel.textContent = itemSelect.options[itemSelect.selectedIndex]?.text ?? 'None';
+    header.append(currentLabel);
+    const body = document.createElement('div'); body.className = 'equip-accordion-body'; body.hidden = true;
+    header.onclick = () => openEquipmentSection(wrapper, header, body, slot, itemSelect);
+    wrapper.append(header, body, itemSelect);
+    return wrapper;
+  }
+  function renderGridSection() {
+    if (!openSection) return;
+    const gridRenderer2 = getGridRenderer();
+    const scrollEl = openSection.body.querySelector('.equip-grid-scroll');
+    if (!scrollEl) return;
+    const containerRect = scrollEl.getBoundingClientRect();
+    // setViewport/setScissor take CSS-pixel coordinates — three.js multiplies by the renderer's
+    // own pixel ratio internally, so pre-scaling here would double-apply it and place the
+    // viewport far outside the canvas. The Y flip (top-left DOM origin -> bottom-left GL origin)
+    // uses the same CSS-pixel canvas height the canvas is sized to (the full viewport).
+    const cssHeight = window.innerHeight;
+    const equippedRoots = [...character.equipment.values()].flatMap(item => item.parts.flatMap(part => [part.group, ...(part.extraGroups ?? [])]));
+    const skeletonWasVisible = skeleton.visible, floorWasVisible = floor.visible;
+    skeleton.visible = false; floor.visible = false;
+    for (const root of equippedRoots) root.visible = false;
+    gridRenderer2.setScissorTest(true);
+    for (const cell of openSection.cells) {
+      if (!cell.built) continue;
+      const rect = cell.viewportEl.getBoundingClientRect();
+      const left = Math.max(rect.left, containerRect.left), right = Math.min(rect.right, containerRect.right);
+      const top = Math.max(rect.top, containerRect.top), bottom = Math.min(rect.bottom, containerRect.bottom);
+      const w = right - left, h = bottom - top;
+      if (w < 2 || h < 2) continue;
+      const x = left, y = cssHeight - bottom;
+      gridRenderer2.setViewport(x, y, w, h); gridRenderer2.setScissor(x, y, w, h);
+      for (const root of cell.roots) root.visible = true;
+      gridCamera.position.set(cell.center.x + Math.sin(GRID_ANGLE) * cell.distance, cell.center.y + cell.distance * 0.18, cell.center.z + Math.cos(GRID_ANGLE) * cell.distance);
+      gridCamera.lookAt(cell.center); gridCamera.aspect = w / h; gridCamera.updateProjectionMatrix();
+      gridRenderer2.render(scene, gridCamera);
+      for (const root of cell.roots) root.visible = false;
+    }
+    gridRenderer2.setScissorTest(false);
+    for (const root of equippedRoots) root.visible = true;
+    skeleton.visible = skeletonWasVisible; floor.visible = floorWasVisible;
+  }
+  // Click a translucent piece of geometry directly on the character for its own opacity slider,
+  // scoped to exactly the material that was hit (one geometry group/material index) rather than
+  // every translucent part of the whole equipped item — "just the left stocking", not "Pants".
+  // Real per-pixel translucency comes from the source flags: `transparent` is only set when the
+  // node was authored with alpha blending. Additive-blended parts are glow effects, not cloth, so
+  // an opacity slider there would just dim a light rather than reveal skin underneath.
+  const pickRaycaster = new THREE.Raycaster();
+  const pickPointer = new THREE.Vector2();
+  let selectedPart = null; // { material, node } — the part with the open slider
+  let hoveredPart = null;  // { material, node } — whatever's under the cursor right now
+  const partOpacityPanel = document.querySelector('#part-opacity');
+  const partOpacityLabel = document.querySelector('#part-opacity-label');
+  const partOpacitySlider = document.querySelector('#part-opacity-slider');
+  // The highlight is a separate render pass, not a tint on the real material: it must stay
+  // visible even when the part's own opacity is 0, or there'd be no way to find it again.
+  const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.6, depthTest: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
+  function isTranslucentMaterial(material) {
+    return !!material && material.transparent && material.blending !== THREE.AdditiveBlending;
+  }
+  // Several thin layers (skin, a lace cutout pattern, an alpha-blend highlight) commonly sit
+  // almost coincident on the same body surface. A cutout (alphaTest) layer has real holes in it
+  // — geometrically solid but meant to be seen through — so it doesn't block reaching a
+  // translucent layer underneath, but a genuinely opaque mesh does: stop at the first one.
+  function pickTranslucentPart(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    pickPointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    pickRaycaster.setFromCamera(pickPointer, camera);
+    for (const candidate of pickRaycaster.intersectObject(character.root, true)) {
+      if (!candidate.object.isMesh || !candidate.object.visible) continue;
+      const materials = Array.isArray(candidate.object.material) ? candidate.object.material : [candidate.object.material];
+      const material = materials[candidate.face?.materialIndex ?? 0] ?? materials[0];
+      if (isTranslucentMaterial(material)) return { material, node: candidate.object };
+      if (!(material?.alphaTest > 0)) return null;
+    }
+    return null;
+  }
+  function hidePartOpacity() {
+    selectedPart = null;
+    partOpacityPanel.hidden = true;
+  }
+  function showPartOpacity(part, clientX, clientY) {
+    selectedPart = part;
+    partOpacityLabel.textContent = (part.node.name || 'Part').replace(/_/g, ' ');
+    partOpacitySlider.value = String(part.material.opacity);
+    const stageRect = stage.getBoundingClientRect();
+    partOpacityPanel.hidden = false;
+    const panelWidth = partOpacityPanel.offsetWidth || 220, panelHeight = partOpacityPanel.offsetHeight || 40;
+    partOpacityPanel.style.left = `${Math.min(Math.max(clientX - stageRect.left - 70, 8), stageRect.width - panelWidth - 8)}px`;
+    partOpacityPanel.style.top = `${Math.min(Math.max(clientY - stageRect.top - panelHeight - 16, 8), stageRect.height - panelHeight - 8)}px`;
+  }
+  partOpacitySlider.oninput = () => { if (selectedPart) selectedPart.material.opacity = Number(partOpacitySlider.value); };
+  document.querySelector('#part-opacity-close').onclick = hidePartOpacity;
+  let pointerDownAt = null;
+  renderer.domElement.addEventListener('pointerdown', event => {
+    if (event.button === 0) pointerDownAt = { x: event.clientX, y: event.clientY };
   });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && openPicker) { closeOpenPicker(); } });
-  function openEquipmentPicker(element, trigger, slot, itemSelect) {
-    if (openPicker?.element === element) { closeOpenPicker(); return; }
-    closeOpenPicker();
-    trigger.setAttribute('aria-expanded', 'true');
-    const popup = document.createElement('div'); popup.className = 'equip-popup';
-    const preview = document.createElement('div'); preview.className = 'equip-preview'; preview.append(getPreviewCanvas());
-    const list = document.createElement('ul'); list.className = 'equip-options'; list.setAttribute('role', 'listbox'); list.tabIndex = -1;
-    const options = [...itemSelect.options];
-    let activeIndex = Math.max(0, options.findIndex(option => option.value === itemSelect.value));
-    const setActive = index => {
-      activeIndex = index;
-      optionEls.forEach((el, i) => el.classList.toggle('active', i === index));
-      optionEls[index]?.scrollIntoView({ block: 'nearest' });
-      previewItem(slot, options[index].value);
-    };
-    const commit = index => { itemSelect.value = options[index].value; itemSelect.dispatchEvent(new Event('change')); closeOpenPicker(); };
-    const optionEls = options.map((option, index) => {
-      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = option.text; li.dataset.value = option.value;
-      if (option.value === itemSelect.value) li.setAttribute('aria-selected', 'true');
-      li.addEventListener('mouseenter', () => setActive(index));
-      li.addEventListener('click', () => commit(index));
-      return li;
-    });
-    list.append(...optionEls);
-    list.addEventListener('keydown', event => {
-      if (event.key === 'ArrowDown') { event.preventDefault(); setActive(Math.min(activeIndex + 1, options.length - 1)); }
-      else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(Math.max(activeIndex - 1, 0)); }
-      else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
-      else if (event.key === 'End') { event.preventDefault(); setActive(options.length - 1); }
-      else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); commit(activeIndex); }
-      else if (event.key === 'Escape') { closeOpenPicker(); trigger.focus(); }
-    });
-    popup.append(preview, list);
-    element.append(popup);
-    openPicker = { element, popup, trigger };
-    list.focus();
-    setActive(activeIndex);
-  }
-  function buildEquipmentPicker(slot, itemSelect) {
-    const picker = document.createElement('div'); picker.className = 'equip-picker';
-    const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'equip-trigger'; trigger.id = `slot-${slot}-trigger`;
-    trigger.setAttribute('aria-haspopup', 'listbox'); trigger.setAttribute('aria-expanded', 'false');
-    trigger.textContent = itemSelect.options[itemSelect.selectedIndex]?.text ?? 'None';
-    trigger.onclick = () => openEquipmentPicker(picker, trigger, slot, itemSelect);
-    picker.append(trigger, itemSelect);
-    return picker;
+  renderer.domElement.addEventListener('pointermove', event => {
+    if (pointerDownAt) return; // orbiting/panning, not browsing for a part to highlight
+    hoveredPart = pickTranslucentPart(event.clientX, event.clientY);
+    renderer.domElement.style.cursor = hoveredPart ? 'pointer' : '';
+  });
+  renderer.domElement.addEventListener('pointerleave', () => { hoveredPart = null; renderer.domElement.style.cursor = ''; });
+  renderer.domElement.addEventListener('pointerup', event => {
+    if (event.button !== 0 || !pointerDownAt) return;
+    const moved = Math.hypot(event.clientX - pointerDownAt.x, event.clientY - pointerDownAt.y);
+    pointerDownAt = null;
+    if (moved > 5) return; // an orbit drag, not a click
+    const target = pickTranslucentPart(event.clientX, event.clientY);
+    if (!target) { hidePartOpacity(); return; }
+    showPartOpacity(target, event.clientX, event.clientY);
+  });
+  // Highlight whatever is hovered and/or currently selected — rendered as its own pass with an
+  // always-on-top material so the part stays findable at any opacity, including 0.
+  function renderPartHighlights() {
+    const targets = new Set();
+    if (hoveredPart) targets.add(hoveredPart.node);
+    if (selectedPart) targets.add(selectedPart.node);
+    if (!targets.size) return;
+    const equippedRoots = [...character.equipment.values()].flatMap(item => item.parts.flatMap(part => [part.group, ...(part.extraGroups ?? [])]));
+    const meshes = [];
+    for (const root of equippedRoots) root.traverse(node => { if (node.isMesh) meshes.push(node); });
+    const previousVisible = meshes.map(mesh => mesh.visible);
+    const skeletonWasVisible = skeleton.visible, floorWasVisible = floor.visible;
+    skeleton.visible = false; floor.visible = false;
+    scene.overrideMaterial = highlightMaterial;
+    renderer.autoClear = false;
+    for (const node of targets) {
+      for (const mesh of meshes) mesh.visible = mesh === node;
+      renderer.render(scene, camera);
+    }
+    renderer.autoClear = true;
+    scene.overrideMaterial = null;
+    meshes.forEach((mesh, i) => { mesh.visible = previousVisible[i]; });
+    skeleton.visible = skeletonWasVisible; floor.visible = floorWasVisible;
   }
   function populateEquipment() {
-    closeOpenPicker();
+    hidePartOpacity();
+    hoveredPart = null;
+    const reopenSlot = openSection?.slot;
+    closeOpenSection();
     const container = document.querySelector('#equipment'); container.replaceChildren();
     const query = document.querySelector('#equipment-search').value.trim().toLowerCase();
     const matches = item => `${item.id} ${item.label}`.toLowerCase().includes(query);
@@ -364,7 +513,7 @@ try {
       for (const item of items) itemSelect.add(new Option(`${item.label} · ${item.id}${matches(item) ? '' : ' (selected)'}`, item.id));
       itemSelect.value = selection?.item.id ?? '';
       itemSelect.onchange = () => selectEquipment(slot, itemSelect.value);
-      const picker = buildEquipmentPicker(slot, itemSelect);
+      const picker = buildEquipmentSection(slot, itemSelect);
       const variantRow = document.createElement('div'); variantRow.className = 'variant'; variantRow.hidden = !selection;
       const variantLabel = document.createElement('label'); variantLabel.htmlFor = `variant-${slot}`; variantLabel.textContent = 'Skin';
       const variantSelect = document.createElement('select'); variantSelect.id = `variant-${slot}`; variantSelect.dataset.variant = slot;
@@ -373,7 +522,8 @@ try {
         variantSelect.value = selection.variant.id; variantSelect.disabled = selection.item.variants.length === 1;
       }
       variantSelect.onchange = () => selectEquipment(slot, itemSelect.value, variantSelect.value);
-      variantRow.append(variantLabel, variantSelect); row.append(label, picker, variantRow); container.append(row);
+      variantRow.append(variantLabel, variantSelect);
+      row.append(label, picker, variantRow); container.append(row);
     }
     const unavailable = library?.index.inventory.filter(item => item.status === 'unavailable' && matches(item)) ?? [];
     const list = document.querySelector('#unavailable-items'); list.replaceChildren();
@@ -382,6 +532,12 @@ try {
     }
     document.querySelector('#unavailable-summary').textContent = `Unavailable source items (${unavailable.length})`;
     document.querySelector('#unavailable').hidden = !unavailable.length;
+    // Re-expand whichever slot was open before this rebuild (an equip change, a search keystroke,
+    // a body swap): losing the grid on every pick would make browsing/comparing items tedious.
+    if (reopenSlot) {
+      const header = document.querySelector(`#slot-${reopenSlot}-trigger`);
+      header?.click();
+    }
   }
   document.querySelector('#equipment-search').addEventListener('input', populateEquipment);
   const bodySelect = document.querySelector('#body');
@@ -583,26 +739,8 @@ try {
     timer.update(); const delta = Math.min(timer.getDelta(), 0.1);
     character.update(delta); controls.update(delta); syncAnimationControls(); renderer.render(scene, camera);
     window.characterReady = renderer.info.render.triangles > 0;
-    if (previewParts) {
-      previewAngle += delta * 0.9;
-      const equippedRoots = [...character.equipment.values()]
-        .flatMap(item => item.parts.flatMap(part => [part.group, ...(part.extraGroups ?? [])]));
-      const previewRoots = previewParts.flatMap(part => [part.group, ...(part.extraGroups ?? [])]);
-      const skeletonWasVisible = skeleton.visible, floorWasVisible = floor.visible;
-      for (const root of equippedRoots) root.visible = false;
-      for (const root of previewRoots) root.visible = true;
-      skeleton.visible = false; floor.visible = false;
-      previewCamera.position.set(
-        previewCenter.x + Math.sin(previewAngle) * previewDistance,
-        previewCenter.y + previewDistance * 0.18,
-        previewCenter.z + Math.cos(previewAngle) * previewDistance);
-      previewCamera.lookAt(previewCenter);
-      previewCamera.aspect = 1; previewCamera.updateProjectionMatrix();
-      previewRenderer.render(scene, previewCamera);
-      for (const root of equippedRoots) root.visible = true;
-      for (const root of previewRoots) root.visible = false;
-      skeleton.visible = skeletonWasVisible; floor.visible = floorWasVisible;
-    }
+    renderPartHighlights();
+    renderGridSection();
   });
   window.characterViewer = { character, assets, library, renderer, scene, camera, controls, frame, bounds, selectEquipment, selectAnimation, selectTextureQuality, textureQualityStatus,
     loadedBytes,
