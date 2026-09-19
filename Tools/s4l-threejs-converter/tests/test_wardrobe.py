@@ -14,38 +14,50 @@ requires_archive = unittest.skipUnless(ARCHIVE, 'Set S4_CLIENT_ZIP to your unpac
 
 @requires_archive
 class WardrobeTests(unittest.TestCase):
-    def test_complete_female_inventory_is_anchored_to_source_xml(self):
+    def test_complete_inventory_is_anchored_to_source_xml(self):
         with zipfile.ZipFile(ARCHIVE) as archive:
             root = ET.fromstring(archive.read('Game/xml/item.x7'))
-        source = {e.get('item_key'): e for e in root.findall('item')
-                  if e.get('item_key', '').isdigit() and len(e.get('item_key')) == 7
-                  and int(e.get('item_key')) // 1000000 == 1
-                  and (int(e.get('item_key')) // 10000) % 100 <= 6
-                  and e.find('base') is not None and e.find('base').get('sex') in ('woman', 'unisex')}
-        self.assertEqual(len(source), 646, 'Source XML population changed; review scope explicitly')
+
+        def costume(element):
+            key = element.get('item_key', '')
+            base = element.find('base')
+            return (key.isdigit() and len(key) == 7 and int(key) // 1000000 == 1
+                    and (int(key) // 10000) % 100 <= 6 and base is not None
+                    and base.get('sex') in ('woman', 'man', 'unisex'))
+
+        def sex_of(element):
+            base = element.find('base')
+            return (base.get('sex') or '') if base is not None else ''
+
+        source = {e.get('item_key'): sex_of(e) for e in root.findall('item') if costume(e)}
+        wearable = {sex: {key for key, item_sex in source.items() if item_sex in (sex, 'unisex')} for sex in ('woman', 'man')}
+        self.assertEqual(len(wearable['woman']), 646, 'Source XML population changed; review scope explicitly')
+        self.assertEqual(len(wearable['man']), 634, 'Source XML population changed; review scope explicitly')
         self.assertTrue((BUNDLE / 'index.json').is_file(), 'Bulk --wardrobe converter has not produced the index')
         index = json.loads((BUNDLE / 'index.json').read_text())
         self.assertEqual((index['format'], index['version']), ('s4-wardrobe', 1))
+        self.assertEqual(index['catalog']['defaultBody'], 'female')
+        self.assertEqual([body['id'] for body in index['catalog']['bodies']], ['female', 'male'])
         self.assertEqual({x['id'] for x in index['inventory']}, set(source))
         self.assertEqual(len(index['inventory']), len(source))
         converted = {x['id'] for x in index['inventory'] if x['status'] == 'converted'}
         unavailable = [x for x in index['inventory'] if x['status'] == 'unavailable']
-        self.assertEqual(len(converted) + len(unavailable), 646)
+        self.assertEqual(len(converted) + len(unavailable), len(source))
         self.assertTrue(all(x.get('reason') for x in unavailable))
-        body = index['catalog']['bodies'][0]
-        self.assertEqual({x['id'] for x in body['items']}, converted)
-        self.assertTrue(set(body['defaults'].values()) <= converted)
-        self.assertEqual(body['animations'], [])
-        self.assertIn(body['skeleton'], index['scenes'])
-        self.assertEqual(index['coverage']['requestedItems'], 646)
+        for body in index['catalog']['bodies']:
+            self.assertEqual({x['id'] for x in body['items']}, wearable[body['sourceSex']] & converted, body['id'])
+            self.assertTrue(set(body['defaults'].values()) <= converted, body['id'])
+            self.assertEqual(body['animations'], [])
+            self.assertIn(body['skeleton'], index['scenes'])
+            for item in body['items']:
+                self.assertTrue(item['parts'])
+                for part in item['parts']:
+                    self.assertIn(part['scene'], index['scenes'])
+                for variant in item['variants']:
+                    self.assertTrue(set(variant['maps'].values()) <= set(index['textures']))
+        self.assertEqual(index['coverage']['requestedItems'], len(source))
         self.assertEqual(index['coverage']['convertedItems'], len(converted))
         self.assertEqual(index['coverage']['unavailableItems'], len(unavailable))
-        for item in body['items']:
-            self.assertTrue(item['parts'])
-            for part in item['parts']:
-                self.assertIn(part['scene'], index['scenes'])
-            for variant in item['variants']:
-                self.assertTrue(set(variant['maps'].values()) <= set(index['textures']))
 
     def test_malformed_references_and_variant_failures_are_explicit(self):
         import subprocess
@@ -80,7 +92,7 @@ class WardrobeTests(unittest.TestCase):
                 for suffix in ('_atex', '_etex', '_n'):
                     target.writestr('Game/' + color + suffix + '.dds', source.read('Game/' + color + '.dds'))
             result = subprocess.run(['dotnet', 'run', '-c', 'Release', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--',
-                                     str(fixture), str(Path(directory) / 'out'), '--wardrobe'], capture_output=True, text=True)
+                                     str(fixture), str(Path(directory) / 'out'), '--wardrobe', '--rig', 'female'], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             actual = json.loads((Path(directory) / 'out/index.json').read_text())
             records = {x['id']: x for x in actual['inventory']}
@@ -101,6 +113,73 @@ class WardrobeTests(unittest.TestCase):
             self.assertTrue(any(issue.get('kind') == 'missing-team-texture'
                                 and issue.get('texture') == 'resources/model/character/foot/48_female_foot_etex.dds'
                                 for issue in actual['coverage']['variantIssues']))
+
+    def test_eight_times_variants_are_emitted_from_the_same_source(self):
+        import subprocess
+        import tempfile
+        index = json.loads((BUNDLE / 'index.json').read_text())
+        basic = json.loads((ROOT / 'Client/Models/Characters/BasicFemale/character.json').read_text())
+        defaults = set(index['catalog']['bodies'][0]['defaults'].values())
+        with tempfile.TemporaryDirectory() as directory, zipfile.ZipFile(ARCHIVE) as source:
+            root = ET.fromstring(source.read('Game/xml/item.x7'))
+            for item in list(root):
+                if item.get('item_key') not in defaults:
+                    root.remove(item)
+            fixture = Path(directory) / 'fixture.zip'
+            with zipfile.ZipFile(fixture, 'w') as target:
+                for key in basic['dependencies']:
+                    if key != 'xml/item.x7':
+                        target.writestr('Game/' + key, source.read('Game/' + key))
+                target.writestr('Game/xml/item.x7', ET.tostring(root, encoding='utf-8'))
+            result = subprocess.run(['dotnet', 'run', '-c', 'Release', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--',
+                                     str(fixture), str(Path(directory) / 'out'), '--wardrobe', '--rig', 'female',
+                                     '--texture-quality', '1x,4x'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            actual = json.loads((Path(directory) / 'out/index.json').read_text())
+            self.assertEqual(actual['coverage']['textureQuality']['requested'], ['1x', '4x'])
+            self.assertTrue(actual['textures'])
+            for path, texture in actual['textures'].items():
+                source_variant = texture['variants']['1x']
+                variant = texture['variants']['4x']
+                self.assertEqual((variant['width'], variant['height']),
+                                 (source_variant['width'] * 4, source_variant['height'] * 4), path)
+                self.assertEqual(variant['algorithm'], 'deterministic-bilinear')
+                self.assertEqual(variant['sourceSha256'], source_variant['sourceSha256'])
+                self.assertTrue((Path(directory) / 'out' / variant['file']).is_file(), path)
+
+    def test_second_run_reuses_existing_levels_instead_of_re_encoding(self):
+        import subprocess
+        import tempfile
+        index = json.loads((BUNDLE / 'index.json').read_text())
+        basic = json.loads((ROOT / 'Client/Models/Characters/BasicFemale/character.json').read_text())
+        defaults = set(index['catalog']['bodies'][0]['defaults'].values())
+        with tempfile.TemporaryDirectory() as directory, zipfile.ZipFile(ARCHIVE) as source:
+            root = ET.fromstring(source.read('Game/xml/item.x7'))
+            for item in list(root):
+                if item.get('item_key') not in defaults:
+                    root.remove(item)
+            fixture = Path(directory) / 'fixture.zip'
+            out = Path(directory) / 'out'
+            with zipfile.ZipFile(fixture, 'w') as target:
+                for key in basic['dependencies']:
+                    if key != 'xml/item.x7':
+                        target.writestr('Game/' + key, source.read('Game/' + key))
+                target.writestr('Game/xml/item.x7', ET.tostring(root, encoding='utf-8'))
+            command = ['dotnet', 'run', '-c', 'Release', '--project', str(ROOT / 'Tools/s4l-threejs-converter'), '--',
+                       str(fixture), str(out), '--wardrobe', '--rig', 'female', '--texture-quality', '1x,4x']
+            first = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            self.assertEqual(json.loads((out / 'index.json').read_text())['coverage']['reusedVariants'], 0,
+                             'The first run has nothing to reuse yet')
+            before = {path.name: path.stat().st_mtime_ns for path in (out / 'textures').iterdir()}
+            second = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            actual = json.loads((out / 'index.json').read_text())
+            levels = sum(len(texture['variants']) for texture in actual['textures'].values())
+            self.assertEqual(actual['coverage']['reusedVariants'], levels,
+                             'A re-run must resume: every level already on disk is reused, not re-encoded')
+            after = {path.name: path.stat().st_mtime_ns for path in (out / 'textures').iterdir()}
+            self.assertEqual(after, before, 'Reusing a level must leave its PNG untouched')
 
     def test_unique_basename_relocations_have_explicit_provenance(self):
         index = json.loads((BUNDLE / 'index.json').read_text())
@@ -153,7 +232,7 @@ class WardrobeTests(unittest.TestCase):
                 self.assertEqual(variant['sourceHeight'], source_height)
                 self.assertTrue(variant['sourceSha256'])
                 self.assertTrue(variant['generatedSha256'])
-        self.assertEqual(index['coverage']['textureQuality']['requested'], ['1x', '2x', '4x'])
+        self.assertEqual(index['coverage']['textureQuality']['requested'], ['1x', '4x'])
         self.assertEqual(index['coverage']['textureQuality']['algorithm'], 'deterministic-bilinear')
         actual_files = {str(p.relative_to(BUNDLE)) for p in (BUNDLE / 'scenes').glob('*') if p.is_file()}
         self.assertEqual(actual_files, expected_files, 'Unindexed partial scene files must not survive failed conversions')
